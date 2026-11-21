@@ -30,11 +30,11 @@
   },
   "NDX": {
     "bias": "UP",
-    "confidence": 0.41071509220084507,
+    "confidence": 0.4107150922008451,
     "probabilities": {
-      "UP": 0.41071509220084507,
+      "UP": 0.4107150922008451,
       "DOWN": 0.34399275422169917,
-      "CONSOLIDATION": 0.24529215357745587
+      "CONSOLIDATION": 0.24529215357745585
     },
     "signals": [
       "Bull Breaker",
@@ -63,7 +63,7 @@
     "probabilities": {
       "UP": 0.4211308376363817,
       "DOWN": 0.37168571043389564,
-      "CONSOLIDATION": 0.20718345192972226
+      "CONSOLIDATION": 0.2071834519297223
     },
     "signals": [
       "Bull Breaker",
