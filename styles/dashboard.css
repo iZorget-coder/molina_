@@ -571,12 +571,22 @@ input {
     gap: 20px;
   }
 
+  /* Mobile: compact 5-day sparkline sitting beside its label */
   .card__chart {
-    align-items: stretch;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+  }
+
+  .spark {
+    flex: 0 0 auto;
+    width: 96px;
+    height: 32px;
   }
 
   .chart__label {
-    align-self: flex-end;
+    align-self: center;
   }
 
   .main__head h1 {
