@@ -248,8 +248,17 @@ function cleanCandles(raw, timeframe) {
     close: Number(c.close),
   }));
 
+  // 0. keep only the latest continuous run, so stale history mixed into the
+  //    array can't skew the axis or the median check below
+  const t = (c) => Date.parse(keyOf(c));
+  const sorted = parsed.filter((c) => Number.isFinite(t(c))).sort((a, b) => t(a) - t(b));
+  const maxGap = (timeframe === '1H' ? 5 : 14) * 86400000;
+  let s = sorted.length - 1;
+  while (s > 0 && t(sorted[s]) - t(sorted[s - 1]) <= maxGap) s--;
+  const recent = sorted.slice(s);
+
   // 1. numbers must be finite, positive and high >= low
-  let rows = parsed.filter(
+  let rows = recent.filter(
     (c) =>
       [c.open, c.high, c.low, c.close].every((n) => Number.isFinite(n) && n > 0) &&
       c.high >= c.low

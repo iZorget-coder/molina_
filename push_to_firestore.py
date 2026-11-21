@@ -30,17 +30,45 @@ HOURLY_FILES = {
     "XAUUSD": "XAUUSD_H1.csv",
 }
 
+
+def _load_sorted(path, time_col, n, max_gap_days):
+    """Read a CSV, sort it by time (oldest -> newest) and return the newest n rows.
+
+    CSV row order is not trusted: some files have old history mixed in, so a
+    plain .tail(n) can return decades-old candles.
+    """
+    df = pd.read_csv(path)
+    df["_t"] = pd.to_datetime(df[time_col], errors="coerce", utc=True)
+    df = (
+        df.dropna(subset=["_t"])
+          .drop_duplicates(subset="_t", keep="last")
+          .sort_values("_t")
+          .tail(n)
+    )
+
+    # Sanity check: warn if the window is not one continuous recent run
+    if len(df) > 1:
+        biggest_gap = df["_t"].diff().dropna().max()
+        if biggest_gap > pd.Timedelta(days=max_gap_days):
+            print(
+                f"[warn] {path}: gap of {biggest_gap} inside the last {n} rows "
+                f"({df['_t'].iloc[0]} -> {df['_t'].iloc[-1]}). "
+                "The CSV is probably missing recent data."
+            )
+    return df
+
+
 def daily_candles(symbol, n=100):
     path = DAILY_FILES.get(symbol)
     if not path or not os.path.exists(path):
         print(f"[warn] No daily CSV for {symbol} ({path})")
         return []
-    df = pd.read_csv(path).tail(n)
+    df = _load_sorted(path, "Date", n, max_gap_days=14)
     out = []
     for _, row in df.iterrows():
         try:
             out.append({
-                "date":  str(row["Date"]),
+                "date":  row["_t"].strftime("%Y-%m-%d"),
                 "open":  float(row["Open"]),
                 "high":  float(row["High"]),
                 "low":   float(row["Low"]),
@@ -50,12 +78,13 @@ def daily_candles(symbol, n=100):
             print(f"[warn] {path} bad row: {e}")
     return out
 
+
 def hourly_candles(symbol, n=200):
     path = HOURLY_FILES.get(symbol)
     if not path or not os.path.exists(path):
         print(f"[warn] No hourly CSV for {symbol} ({path})")
         return []
-    df = pd.read_csv(path).tail(n)
+    df = _load_sorted(path, "timestamp", n, max_gap_days=5)
     out = []
     for _, row in df.iterrows():
         try:
@@ -69,6 +98,7 @@ def hourly_candles(symbol, n=200):
         except (KeyError, ValueError) as e:
             print(f"[warn] {path} bad row: {e}")
     return out
+
 
 for symbol in predictions:
     predictions[symbol]["candles"] = daily_candles(symbol, 100)
