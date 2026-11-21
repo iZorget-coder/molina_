@@ -2,11 +2,11 @@ name: Daily Market Pipeline
 
 on:
   schedule:
-    - cron: '30 0 * * *'
+    - cron: '17 1 * * *'   # 03:17 SAST (main run)
+    - cron: '47 2 * * *'   # 04:47 SAST (retry)
+    - cron: '17 4 * * *'   # 06:17 SAST (retry)
+    - cron: '47 5 * * *'   # 07:47 SAST (last retry)
   workflow_dispatch:
-
-permissions:
-  contents: write
 
 # Never run two pipelines at once (e.g. a scheduled run plus a manual one)
 concurrency:
@@ -14,8 +14,49 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  run-pipeline:
+  check-already-ran:
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - name: Has the pipeline already succeeded today (SAST)?
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # Manual runs always go ahead
+          if [ "${{ github.event_name }}" != "schedule" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Midnight today in SAST, expressed in UTC
+          since=$(TZ=Africa/Johannesburg date -d "today 00:00" -u +%Y-%m-%dT%H:%M:%SZ)
+
+          done_today=$(gh run list \
+            --workflow "Daily Market Pipeline" \
+            --status success \
+            --limit 50 \
+            --json createdAt \
+            --jq "[.[] | select(.createdAt >= \"$since\")] | length")
+
+          echo "Successful runs since $since: $done_today"
+          if [ "$done_today" -gt 0 ]; then
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  run-pipeline:
+    needs: check-already-ran
+    if: needs.check-already-ran.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
