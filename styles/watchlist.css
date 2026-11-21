@@ -1626,6 +1626,8 @@ body:has(.add-modal[open]) {
 
   display: flex;
 
+  flex-shrink: 0;
+
   gap: 10px;
 
 }
@@ -1633,6 +1635,10 @@ body:has(.add-modal[open]) {
 
 
 .add-modal__btn {
+
+  flex-shrink: 0;
+
+  white-space: nowrap;
 
   height: 38px;
 
@@ -1756,6 +1762,48 @@ body:has(.add-modal[open]) {
   .add-modal__row { grid-template-columns: 22px minmax(0, 1fr) auto; }
 
   .add-modal__price { display: none; }
+
+
+
+  .add-modal__foot {
+
+    flex-wrap: wrap;
+
+    gap: 12px;
+
+  }
+
+
+
+  .add-modal__count {
+
+    min-width: 0;
+
+    font-size: 13px;
+
+    white-space: nowrap;
+
+  }
+
+
+
+  .add-modal__actions {
+
+    gap: 8px;
+
+    margin-left: auto;
+
+  }
+
+
+
+  .add-modal__btn {
+
+    padding: 0 14px;
+
+    font-size: 14px;
+
+  }
 
 }
 
