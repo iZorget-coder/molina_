@@ -211,77 +211,222 @@ function paintTrade(symbol, m) {
   }
 }
 
-/* ---------- Chart (with timeframe switching) ---------- */
+/* ==========================================================
+   Chart (with timeframe switching)
+
+   How it stays accurate:
+   - bad candles (zero / negative / wildly off-scale prices) are
+     dropped before the axis is worked out, so one bad row can't
+     squash every other candle against the bottom;
+   - the SVG viewBox always equals its real pixel size, so nothing
+     is stretched (labels were squashed on phones before);
+   - the price axis uses "nice" round tick values;
+   - entry / stop / target are placed with the same y() function as
+     the candles, and nearby levels widen the axis so they sit next
+     to the candles instead of being pushed off-screen.
+   ========================================================== */
+
+const CHART_FONT = "'Space Mono', monospace";
+const CHART_FONT_SIZE = 11;
+const CHAR_W = CHART_FONT_SIZE * 0.62; // approx. width of one Space Mono glyph
 
 let currentTimeframe = '1D';
 let currentMarket = null;
+let currentSymbol = null;
+let chartObserver = null;
+let lastChartSize = { W: 0, H: 0 };
+
+/** Drop candles that can't be real, then sort and de-duplicate. */
+function cleanCandles(raw, timeframe) {
+  const keyOf = (c) => (timeframe === '1H' ? c.time : c.date);
+
+  const parsed = (Array.isArray(raw) ? raw : []).map((c) => ({
+    ...c,
+    open: Number(c.open),
+    high: Number(c.high),
+    low: Number(c.low),
+    close: Number(c.close),
+  }));
+
+  // 1. numbers must be finite, positive and high >= low
+  let rows = parsed.filter(
+    (c) =>
+      [c.open, c.high, c.low, c.close].every((n) => Number.isFinite(n) && n > 0) &&
+      c.high >= c.low
+  );
+
+  // 2. every price must sit within +/-50% of the median close
+  if (rows.length) {
+    const closes = rows.map((c) => c.close).sort((a, b) => a - b);
+    const median = closes[Math.floor(closes.length / 2)];
+    const ok = (n) => n >= median * 0.5 && n <= median * 1.5;
+    rows = rows.filter((c) => ok(c.open) && ok(c.high) && ok(c.low) && ok(c.close));
+  }
+
+  // 3. wicks must contain the candle body
+  rows = rows.map((c) => ({
+    ...c,
+    high: Math.max(c.high, c.open, c.close),
+    low: Math.min(c.low, c.open, c.close),
+  }));
+
+  // 4. one candle per date/time, oldest first
+  const byKey = new Map();
+  rows.forEach((c, i) => byKey.set(keyOf(c) ?? `#${i}`, c));
+  rows = [...byKey.values()];
+  rows.sort((a, b) => {
+    const ta = Date.parse(keyOf(a));
+    const tb = Date.parse(keyOf(b));
+    return Number.isFinite(ta) && Number.isFinite(tb) ? ta - tb : 0;
+  });
+
+  return { rows, dropped: parsed.length - rows.length };
+}
+
+/** Round, evenly spaced axis values (1, 2, 5 x 10^n). */
+function niceTicks(lo, hi, target) {
+  const raw = (hi - lo) / Math.max(target, 1);
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const norm = raw / mag;
+  const step = (norm < 1.5 ? 1 : norm < 3.5 ? 2 : norm < 7.5 ? 5 : 10) * mag;
+
+  const first = Math.ceil(lo / step - 1e-9);
+  const last = Math.floor(hi / step + 1e-9);
+  const ticks = [];
+  for (let k = first; k <= last; k++) ticks.push(k * step);
+
+  const decimals = Math.max(0, -Math.floor(Math.log10(step) + 1e-9));
+  return { ticks: ticks.length ? ticks : [lo, hi], decimals };
+}
 
 function paintChart() {
-  const svg = document.getElementById('price-chart');
-  const lastDateEl = document.getElementById('chart-last-date');
-  const titleEl = document.getElementById('chart-title');
+  const svg = $('price-chart');
+  const lastDateEl = $('chart-last-date');
+  const titleEl = $('chart-title');
   if (!svg) return;
 
+  // The axis labels are drawn inside the SVG, so let it fill its frame.
+  const wrap = svg.parentElement;
+  if (wrap) wrap.style.paddingRight = '0';
+  svg.style.width = '100%';
+  svg.style.height = '100%';
+
+  // Real pixel size -> viewBox 1:1 -> no horizontal squashing on phones.
+  const rect = svg.getBoundingClientRect();
+  const W = Math.round(rect.width);
+  const H = Math.round(rect.height);
+  if (W < 50 || H < 50) return; // not laid out yet
+  lastChartSize = { W, H };
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+  const narrow = W < 520;
   const m = currentMarket;
   const isH1 = currentTimeframe === '1H';
-  const candles = isH1
-    ? (Array.isArray(m?.candlesH1) ? m.candlesH1 : [])
-    : (Array.isArray(m?.candles) ? m.candles : []);
+
+  const { rows, dropped } = cleanCandles(isH1 ? m?.candlesH1 : m?.candles, currentTimeframe);
+
+  if (dropped > 0) {
+    console.warn(
+      `[chart] ${currentSymbol} ${currentTimeframe}: ignored ${dropped} bad candle(s). ` +
+      'Check the source CSV for zero, negative or off-scale prices.'
+    );
+  }
+
+  // Fewer, thicker candles on phones
+  const candles = narrow ? rows.slice(-60) : rows;
 
   if (titleEl) {
-    titleEl.textContent = isH1
-      ? `Price, ${candles.length} hourly candles`
-      : `Price, ${candles.length} daily candles`;
+    titleEl.textContent = `Price, ${candles.length} ${isH1 ? 'hourly' : 'daily'} candles`;
   }
 
   if (!candles.length) {
-    svg.innerHTML = `<text x="500" y="200" text-anchor="middle" fill="#8b95ad" font-size="14">No ${isH1 ? 'hourly' : 'daily'} data</text>`;
+    svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" fill="#8b95ad" font-size="14" font-family="${CHART_FONT}">No ${isH1 ? 'hourly' : 'daily'} data</text>`;
     if (lastDateEl) lastDateEl.textContent = '';
     return;
   }
 
   if (lastDateEl) {
     const last = candles[candles.length - 1];
-    lastDateEl.textContent = `Last: ${formatCandleLabel(last, currentTimeframe)}`;
+    lastDateEl.textContent =
+      `Last: ${formatCandleLabel(last, currentTimeframe)}` +
+      (dropped ? ` · ${dropped} bad candle${dropped === 1 ? '' : 's'} hidden` : '');
   }
 
-  const W = 1000, H = 400;
-  const PAD = { left: 70, right: 90, top: 20, bottom: 40 };
-  const plotW = W - PAD.left - PAD.right;
-  const plotH = H - PAD.top - PAD.bottom;
+  /* ----- Price range ----- */
+  const lastClose = candles[candles.length - 1].close;
+  const minP = Math.min(...candles.map((c) => c.low));
+  const maxP = Math.max(...candles.map((c) => c.high));
+  const span = maxP - minP || lastClose * 0.01;
+  const reach = Math.max(span * 0.75, lastClose * 0.015);
 
   const t = m?.trade;
-  const highs = candles.map(c => c.high);
-  const lows = candles.map(c => c.low);
+  const levels = [
+    { key: 'TP',    price: t?.takeProfit, color: '#22c55e' },
+    { key: 'Entry', price: t?.entry,      color: '#818cf8' },
+    { key: 'SL',    price: t?.stopLoss,   color: '#ef4444' },
+  ].filter((l) => Number.isFinite(l.price) && l.price > 0);
 
-  // Y-range from candles ONLY — trade levels do not stretch the axis
-  const minP = Math.min(...lows);
-  const maxP = Math.max(...highs);
-  const pad = (maxP - minP) * 0.04 || 1;
-  const lo = minP - pad;
-  const hi = maxP + pad;
+  // A level close to the candles widens the axis so it is drawn next to
+  // them. A level far away (a bad value) is shown as an edge marker only.
+  levels.forEach((l) => {
+    l.near = l.price >= minP - reach && l.price <= maxP + reach;
+  });
 
-  const y = p => PAD.top + plotH - ((p - lo) / (hi - lo)) * plotH;
+  let lo = minP;
+  let hi = maxP;
+  levels.filter((l) => l.near).forEach((l) => {
+    lo = Math.min(lo, l.price);
+    hi = Math.max(hi, l.price);
+  });
+
+  if (hi - lo < lastClose * 1e-6) {
+    lo -= lastClose * 0.005;
+    hi += lastClose * 0.005;
+  } else {
+    const pad = (hi - lo) * 0.06;
+    lo -= pad;
+    hi += pad;
+  }
+
+  /* ----- Layout in real pixels ----- */
+  const { ticks, decimals } = niceTicks(lo, hi, H < 260 ? 4 : 6);
+  const fmtTick = (v) =>
+    v.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+
+  const widest = Math.max(...ticks.map((v) => fmtTick(v).length));
+  const PAD = {
+    left: Math.ceil(widest * CHAR_W) + 14,
+    right: narrow ? 8 : 16,
+    top: 14,
+    bottom: 28,
+  };
+  const plotW = W - PAD.left - PAD.right;
+  const plotH = H - PAD.top - PAD.bottom;
+  const plotRight = PAD.left + plotW;
+  const plotBottom = PAD.top + plotH;
+
+  const y = (p) => PAD.top + plotH - ((p - lo) / (hi - lo)) * plotH;
   const barW = plotW / candles.length;
-  const bodyW = Math.max(barW * 0.6, 1);
+  const bodyW = Math.min(Math.max(barW * 0.62, 1.5), 14);
 
   let html = '';
 
-  // Gridlines + y-axis labels
-  for (let i = 0; i <= 5; i++) {
-    const price = lo + (hi - lo) * (i / 5);
+  /* ----- Gridlines + price axis ----- */
+  ticks.forEach((price) => {
     const yPix = y(price);
-    html += `<line x1="${PAD.left}" y1="${yPix}" x2="${W - PAD.right}" y2="${yPix}" stroke="#1b2540" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
-    html += `<text x="${PAD.left - 8}" y="${yPix + 4}" text-anchor="end" fill="#8b95ad" font-size="11" font-family="'Space Mono', monospace">${price.toLocaleString('en-US', { maximumFractionDigits: 2 })}</text>`;
-  }
+    if (yPix < PAD.top - 1 || yPix > plotBottom + 1) return;
+    html += `<line x1="${PAD.left}" y1="${yPix}" x2="${plotRight}" y2="${yPix}" stroke="#1b2540" stroke-width="1"/>`;
+    html += `<text x="${PAD.left - 8}" y="${yPix + 4}" text-anchor="end" fill="#8b95ad" font-size="${CHART_FONT_SIZE}" font-family="${CHART_FONT}">${fmtTick(price)}</text>`;
+  });
 
-  // Candles
+  /* ----- Candles ----- */
   candles.forEach((c, i) => {
     const x = PAD.left + i * barW + barW / 2;
     const up = c.close >= c.open;
     const color = up ? '#22c55e' : '#ef4444';
 
-    html += `<line x1="${x}" y1="${y(c.high)}" x2="${x}" y2="${y(c.low)}" stroke="${color}" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
+    html += `<line x1="${x}" y1="${y(c.high)}" x2="${x}" y2="${y(c.low)}" stroke="${color}" stroke-width="1"/>`;
 
     const bodyTop = y(Math.max(c.open, c.close));
     const bodyBot = y(Math.min(c.open, c.close));
@@ -289,37 +434,79 @@ function paintChart() {
     html += `<rect x="${x - bodyW / 2}" y="${bodyTop}" width="${bodyW}" height="${bodyH}" fill="${color}"/>`;
   });
 
-  // Trade levels — drawn only if inside the visible range; edge indicator otherwise
-  const levels = [
-    { price: t?.takeProfit, color: '#22c55e', label: 'TP' },
-    { price: t?.entry,      color: '#818cf8', label: 'Entry' },
-    { price: t?.stopLoss,   color: '#ef4444', label: 'SL' },
-  ].filter(l => typeof l.price === 'number' && !isNaN(l.price));
+  /* ----- Entry / stop / target ----- */
+  const LABEL_H = 16;
+  const plotted = levels.map((l) => ({ ...l, y: y(l.price) }));
+  const inside = plotted.filter((l) => l.y >= PAD.top - 1 && l.y <= plotBottom + 1);
+  const outside = plotted.filter((l) => !inside.includes(l));
 
-  levels.forEach(l => {
-    const yPix = y(l.price);
-    const inside = yPix >= PAD.top && yPix <= PAD.top + plotH;
-
-    if (inside) {
-      html += `<line x1="${PAD.left}" y1="${yPix}" x2="${W - PAD.right}" y2="${yPix}" stroke="${l.color}" stroke-width="1" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"/>`;
-      html += `<text x="${W - PAD.right - 4}" y="${yPix - 4}" text-anchor="end" fill="${l.color}" font-size="11" font-weight="600" font-family="'Space Mono', monospace">${l.label} ${l.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}</text>`;
-    } else {
-      const isAbove = yPix < PAD.top;
-      const edgeY = isAbove ? PAD.top + 12 : PAD.top + plotH - 6;
-      const arrow = isAbove ? '▲' : '▼';
-      html += `<text x="${W - PAD.right - 4}" y="${edgeY}" text-anchor="end" fill="${l.color}" font-size="10" font-weight="600" font-family="'Space Mono', monospace">${arrow} ${l.label} ${l.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}</text>`;
-    }
+  // dashed lines at the exact price
+  inside.forEach((l) => {
+    html += `<line x1="${PAD.left}" y1="${l.y}" x2="${plotRight}" y2="${l.y}" stroke="${l.color}" stroke-width="1" stroke-dasharray="6 4"/>`;
   });
 
-  // X-axis labels
-  for (let i = 0; i <= 4; i++) {
-    const idx = Math.floor((candles.length - 1) * (i / 4));
+  // price tags at the right edge, nudged apart if two levels are close
+  inside.sort((a, b) => a.y - b.y);
+  let prev = -Infinity;
+  inside.forEach((l) => {
+    l.ly = Math.max(l.y, prev + LABEL_H);
+    prev = l.ly;
+  });
+  if (inside.length) {
+    inside[inside.length - 1].ly = Math.min(inside[inside.length - 1].ly, plotBottom - LABEL_H / 2);
+    for (let i = inside.length - 2; i >= 0; i--) {
+      inside[i].ly = Math.min(inside[i].ly, inside[i + 1].ly - LABEL_H);
+    }
+  }
+
+  inside.forEach((l) => {
+    const text = `${l.key} ${fmt(l.price)}`;
+    const w = Math.ceil(text.length * CHAR_W) + 10;
+    html += `<rect x="${plotRight - w}" y="${l.ly - LABEL_H / 2}" width="${w}" height="${LABEL_H}" rx="3" fill="#111a30" fill-opacity="0.92" stroke="${l.color}" stroke-width="1"/>`;
+    html += `<text x="${plotRight - w / 2}" y="${l.ly + 4}" text-anchor="middle" fill="${l.color}" font-size="${CHART_FONT_SIZE}" font-weight="600" font-family="${CHART_FONT}">${text}</text>`;
+  });
+
+  // levels far outside the candles: edge markers only (never mis-plotted)
+  let above = 0;
+  let below = 0;
+  outside.forEach((l) => {
+    const isAbove = l.y < PAD.top;
+    const edgeY = isAbove ? PAD.top + 10 + above++ * 14 : plotBottom - 6 - below++ * 14;
+    html += `<text x="${plotRight - 4}" y="${edgeY}" text-anchor="end" fill="${l.color}" font-size="10" font-weight="600" font-family="${CHART_FONT}">${isAbove ? '▲' : '▼'} ${l.key} ${fmt(l.price)}</text>`;
+  });
+
+  /* ----- Date axis ----- */
+  const labelCount = Math.min(candles.length, W < 380 ? 2 : narrow ? 3 : 5);
+  for (let i = 0; i < labelCount; i++) {
+    const idx = labelCount === 1 ? 0 : Math.round((candles.length - 1) * (i / (labelCount - 1)));
     const c = candles[idx];
     const x = PAD.left + idx * barW + barW / 2;
-    html += `<text x="${x}" y="${H - PAD.bottom + 18}" text-anchor="middle" fill="#8b95ad" font-size="11" font-family="'Space Mono', monospace">${formatCandleLabel(c, currentTimeframe)}</text>`;
+    const anchor = i === 0 ? 'start' : i === labelCount - 1 ? 'end' : 'middle';
+    const tx = i === 0 ? PAD.left : i === labelCount - 1 ? plotRight : x;
+    html += `<text x="${tx}" y="${H - 8}" text-anchor="${anchor}" fill="#8b95ad" font-size="${CHART_FONT_SIZE}" font-family="${CHART_FONT}">${formatCandleLabel(c, currentTimeframe)}</text>`;
   }
 
   svg.innerHTML = html;
+}
+
+/** Redraw when the chart's size changes (rotation, window resize, layout). */
+function watchChartSize() {
+  const svg = $('price-chart');
+  if (!svg || typeof ResizeObserver === 'undefined') return;
+
+  chartObserver?.disconnect();
+  chartObserver = new ResizeObserver(() => {
+    const el = $('price-chart');
+    if (!el || !el.isConnected) {
+      chartObserver?.disconnect();
+      return;
+    }
+    const r = el.getBoundingClientRect();
+    if (Math.round(r.width) !== lastChartSize.W || Math.round(r.height) !== lastChartSize.H) {
+      paintChart();
+    }
+  });
+  chartObserver.observe(svg.parentElement || svg);
 }
 
 function bindTimeframeButtons() {
@@ -402,12 +589,14 @@ export async function initMarketPage() {
 
     const m = live?.bySymbol[symbol] ?? null;
     currentMarket = m;
+    currentSymbol = symbol;
 
     paintHeader(symbol, m);
     paintPrediction(symbol, m, live);
     paintTrade(symbol, m);
     paintSmc(symbol, m);
     paintChart();
+    watchChartSize();
     bindTimeframeButtons();
   } catch (err) {
     console.error('Could not load the market', err);
