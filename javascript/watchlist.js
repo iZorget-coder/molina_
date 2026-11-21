@@ -245,6 +245,14 @@ function cardMarkup(market) {
   const sparkDir = market.dir === 'none' ? 'flat' : market.dir;
   const sparkPoints = sparkPolyline(market);
 
+  // Same 5 points drawn twice: a normal one in .card__chart (desktop) and a
+  // mini one next to the pill (mobile). CSS shows one and hides the other.
+  const sparkSvg = (extra = '') => sparkPoints
+    ? `<svg viewBox="0 0 200 56" preserveAspectRatio="none" class="spark spark--${sparkDir} ${extra}" aria-hidden="true">
+         <polyline points="${sparkPoints}"/>
+       </svg>`
+    : '';
+
   return `
     <article
       class="card"
@@ -255,7 +263,10 @@ function cardMarkup(market) {
     >
       <div class="card__id">
         <div class="card__title">${market.name} <span class="ticker">${market.symbol}</span></div>
-        <span class="pill pill--${market.dir}">${pillLabel}</span>
+        <div class="card__signal">
+          <span class="pill pill--${market.dir}">${pillLabel}</span>
+          ${sparkSvg('spark--mini')}
+        </div>
       </div>
       <div class="card__conf">
         <div class="conf__row"><span class="conf__label">Confidence</span><span class="conf__value">${confidenceText}</span></div>
@@ -266,11 +277,7 @@ function cardMarkup(market) {
         </div>
       </div>
       <div class="card__chart">
-        ${sparkPoints
-          ? `<svg viewBox="0 0 200 56" preserveAspectRatio="none" class="spark spark--${sparkDir}" aria-hidden="true">
-               <polyline points="${sparkPoints}"/>
-             </svg>`
-          : ''}
+        ${sparkSvg()}
         <span class="chart__label">${sparkPoints ? 'Last 5 sessions' : 'No recent price data'}</span>
       </div>
     </article>

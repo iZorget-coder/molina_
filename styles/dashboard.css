@@ -393,6 +393,17 @@ input {
 .pill--down { color: var(--down); background: var(--down-bg); border-color: var(--down-border); }
 .pill--flat { color: var(--flat); background: var(--flat-bg); border-color: var(--flat-border); }
 
+.card__signal {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+}
+
+.spark--mini {
+  display: none;
+}
+
 /* Confidence */
 .conf__row {
   display: flex;
@@ -571,22 +582,26 @@ input {
     gap: 20px;
   }
 
-  /* Mobile: compact 5-day sparkline sitting beside its label */
-  .card__chart {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
+  /* Mobile: show the mini sparkline beside the UP / DOWN pill,
+     hide the full-size chart block at the bottom of the card */
+  .card .card__chart {
+    display: none;
   }
 
-  .spark {
+  .card .card__signal .pill {
     flex: 0 0 auto;
-    width: 96px;
-    height: 32px;
+    white-space: nowrap;
+    padding: 5px 10px;
+    font-size: 13px;
   }
 
-  .chart__label {
-    align-self: center;
+  .card .card__signal .spark--mini {
+    display: block;
+    flex: 1 1 0;
+    min-width: 40px;
+    max-width: 130px;
+    height: 30px;
+    margin-left: auto;
   }
 
   .main__head h1 {
