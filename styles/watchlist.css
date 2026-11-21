@@ -1713,15 +1713,10 @@ body:has(.add-modal[open]) {
 
 
 #watchlist-table tbody tr[data-open-market] { cursor: pointer; }
-
 #watchlist-table tbody tr[data-open-market]:hover { background: rgba(255, 255, 255, 0.03); }
-
 #watchlist-table tbody tr[data-open-market]:focus-visible {
-
   outline: 2px solid #818cf8;
-
   outline-offset: -2px;
-
 }
 
 
@@ -2281,3 +2276,4 @@ body:has(.add-modal[open]) {
 
 
 }
+
