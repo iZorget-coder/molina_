@@ -32,18 +32,25 @@ HOURLY_FILES = {
 
 
 def _load_sorted(path, time_col, n, max_gap_days):
-    """Read a CSV, sort it by time (oldest -> newest) and return the newest n rows.
+    """Return the newest n rows of a CSV, ordered earliest -> latest.
 
-    CSV row order is not trusted: some files have old history mixed in, so a
-    plain .tail(n) can return decades-old candles.
+    The row order inside a CSV is NOT trusted. Some files are stored
+    newest-first (DOW, S&P 500) and have extra rows appended at the bottom,
+    others are oldest-first (NASDAQ, Gold). Whatever the layout, this:
+      1. parses the time column,
+      2. drops rows with an unreadable time,
+      3. removes duplicate timestamps (keeps the last copy in the file),
+      4. sorts from earliest to latest,
+      5. keeps the last n rows (= the n most recent candles).
     """
     df = pd.read_csv(path)
     df["_t"] = pd.to_datetime(df[time_col], errors="coerce", utc=True)
     df = (
         df.dropna(subset=["_t"])
           .drop_duplicates(subset="_t", keep="last")
-          .sort_values("_t")
+          .sort_values("_t", kind="stable")
           .tail(n)
+          .reset_index(drop=True)
     )
 
     # Sanity check: warn if the window is not one continuous recent run
@@ -100,9 +107,21 @@ def hourly_candles(symbol, n=200):
     return out
 
 
+def _check_order(symbol, name, candles, key):
+    """Make sure a candle list really runs earliest -> latest."""
+    if not candles:
+        return
+    stamps = [pd.Timestamp(c[key]) for c in candles]
+    if stamps != sorted(stamps):
+        raise SystemExit(f"[error] {symbol} {name} candles are not in ascending order")
+    print(f"[ok] {symbol} {name}: {len(candles)} candles, {candles[0][key]} -> {candles[-1][key]}")
+
+
 for symbol in predictions:
     predictions[symbol]["candles"] = daily_candles(symbol, 100)
     predictions[symbol]["candlesH1"] = hourly_candles(symbol, 50)
+    _check_order(symbol, "daily",  predictions[symbol]["candles"],   "date")
+    _check_order(symbol, "hourly", predictions[symbol]["candlesH1"], "time")
 
 data_date = next(iter(predictions.values()))["date"]
 
