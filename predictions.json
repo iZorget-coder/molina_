@@ -1,11 +1,11 @@
 {
   "SPX": {
     "bias": "UP",
-    "confidence": 0.4437389583990937,
+    "confidence": 0.4406658608381677,
     "probabilities": {
-      "UP": 0.4437389583990937,
-      "DOWN": 0.3163387521287793,
-      "CONSOLIDATION": 0.23992228947212793
+      "UP": 0.4406658608381677,
+      "DOWN": 0.31534909445390485,
+      "CONSOLIDATION": 0.2439850447079277
     },
     "signals": [
       "Bull Breaker",
@@ -17,22 +17,22 @@
     "trade": {
       "action": "LONG",
       "entry": 7308.95,
-      "stop_loss": 7069.76,
+      "stop_loss": 7066.73,
       "take_profit": 7816.7,
-      "risk": 239.19,
+      "risk": 242.22,
       "reward": 507.75,
-      "risk_reward": 2.12,
+      "risk_reward": 2.1,
       "conviction": "Medium",
-      "entry_type": "H1 OB zone, prob=0.49, New York 16:00 UTC",
+      "entry_type": "H1 IMBALANCE zone, prob=0.64, Asia (late) 23:00 UTC",
       "stop_source": "ATR 1.5x fallback",
       "target_source": "Swing High 7816.70 (DOL rank 3)"
     }
   },
   "NDX": {
     "bias": "UP",
-    "confidence": 0.4117368382848987,
+    "confidence": 0.41173683828489865,
     "probabilities": {
-      "UP": 0.4117368382848987,
+      "UP": 0.41173683828489865,
       "DOWN": 0.3293058463503893,
       "CONSOLIDATION": 0.2589573153647124
     },
@@ -63,7 +63,7 @@
     "probabilities": {
       "UP": 0.41365489107665887,
       "DOWN": 0.36601679945393206,
-      "CONSOLIDATION": 0.22032830946940918
+      "CONSOLIDATION": 0.22032830946940915
     },
     "signals": [
       "Bull Breaker",
