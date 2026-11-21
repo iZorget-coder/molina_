@@ -1,708 +1,592 @@
 
-/* Bottom nav is hidden on desktop */
-.bottom-nav { display: none; }
-.sidebar__head .see-all { display: none; }
+/* ---------- Shared colour tokens ---------- */
+:root {
+  --bg: #0a0f1d;
+  --bg-panel: #0c1222;
+  --bg-card: #111a30;
+  --bg-hover: #16213b;
+  --bg-inset: #16203a;
+  --border: #1c2742;
+  --border-soft: #17213a;
+  --track: #1f2a45;
 
-@media (max-width: 800px) {
+  --text: #f1f4fb;
+  --text-muted: #8b95ad;
+  --text-light: #a9b2c7;
 
-  /* ---------- Shared shell ---------- */
-  html, body { max-width: 100%; overflow-x: hidden; }
+  --accent: #6366f1;
+  --accent-hover: #7477f5;
+  --accent-soft: #818cf8;
 
-  body { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+  --up: #22c55e;
+  --up-bg: rgba(34, 197, 94, 0.12);
+  --up-border: rgba(34, 197, 94, 0.35);
 
-  .topbar { height: 64px; padding: 0 20px; }
-  .topbar .brand { margin-right: 0; }
+  --down: #ef4444;
+  --down-bg: rgba(239, 68, 68, 0.12);
+  --down-border: rgba(239, 68, 68, 0.4);
 
-  /* Watchlist page has its own heading — no top bar there */
-  body[data-view="watchlist"] .topbar { display: none; }
+  --flat: #f59e0b;
+  --flat-bg: rgba(245, 158, 11, 0.12);
+  --flat-border: rgba(245, 158, 11, 0.4);
+}
 
-  /* Bottom navigation styles now live in nav.js (self-contained). */
+.page:has(> .market-head) {
 
-  /* ---------- Watchlist page ---------- */
-  .page {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
+  /* ---------- Page shell ---------- */
+  & {
+    max-width: 1700px;
+    margin: 0 auto;
+    padding: 28px 30px 60px;
+  }
+
+  h1,
+  h2,
+  h3,
+  p,
+  ul {
     margin: 0;
-    padding: 22px 16px 24px;
-    overflow-x: hidden;
-  }
-
-  .page__head { align-items: center; margin-bottom: 22px; gap: 12px; }
-  .page__head h1 { font-size: 27px; line-height: 1.2; }
-  #watchlist-count { display: none; }
-
-  .page__head .btn {
-    width: 46px;
-    height: 46px;
-    min-width: 46px;
     padding: 0;
-    justify-content: center;
-    font-size: 0;
-    border-radius: 10px;
   }
-  .page__head .btn svg { width: 22px; height: 22px; }
 
-  .chips {
-    flex-wrap: nowrap;
-    gap: 10px;
-    margin-bottom: 18px;
-    overflow-x: auto;
-    scrollbar-width: none;
+  ul { list-style: none; }
+
+  a {
+    color: inherit;
+    text-decoration: none;
   }
-  .chips::-webkit-scrollbar { display: none; }
-  .chip { flex: 0 0 auto; height: 42px; padding: 0 18px; font-size: 14px; border-radius: 9px; }
 
-  .table-wrap { width: 100%; overflow: visible; border: 0; background: transparent; }
+  [hidden] { display: none !important; }
 
-  #watchlist-table {
-    display: block;
-    width: 100%;
-    min-width: 0;
-    border: 0;
-    background: transparent;
-  }
-  #watchlist-table thead { display: none; }
-  #watchlist-table tbody { display: flex; flex-direction: column; gap: 14px; width: 100%; }
-
-  #watchlist-table tbody tr {
-    position: relative;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "market close"
-      "forecast change";
+  /* ==========================================================
+     Header: back | symbol | price ............ Ask AI | 1D 1H
+     ========================================================== */
+  .market-head {
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    column-gap: 10px;
-    row-gap: 16px;
-    width: 100%;
-    min-height: 129px;
-    padding: 19px 18px;
+    justify-content: space-between;
+    gap: 16px 24px;
+    margin-bottom: 22px;
+  }
+
+  .market-head__left {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    min-width: 0;
+  }
+
+  .back {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
     background: var(--bg-card);
+    color: var(--text-light);
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .back:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+  }
+
+  .market-head__title { min-width: 0; }
+
+  .market-head__title h1 {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+  }
+
+  .market-head__title p {
+    margin-top: 2px;
+    font-size: 14px;
+    color: var(--text-light);
+  }
+
+  .market-head__price {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-left: 10px;
+    padding-left: 24px;
+    border-left: 1px solid var(--border);
+  }
+
+  .price {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+  }
+
+  .delta {
+    font-size: 16px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .delta.up   { color: var(--up); }
+  .delta.down { color: var(--down); }
+
+  .market-head__right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .btn-ai {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    height: 42px;
+    padding: 0 18px;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    transition: background 0.15s;
+  }
+
+  .btn-ai:hover { background: var(--accent-hover); }
+
+  .tf {
+    display: flex;
+    gap: 8px;
+  }
+
+  .tf .chip {
+    min-width: 46px;
+    height: 38px;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-light);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+
+  .tf .chip:hover {
+    background: var(--bg-card);
+    color: var(--text);
+  }
+
+  .tf .chip.is-active {
+    border-color: var(--accent);
+    background: #1a1f4d;
+    color: var(--text);
+  }
+
+  /* ==========================================================
+     Two-column grid
+     ========================================================== */
+  .grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 400px;
+    gap: 20px;
+    align-items: start;
+  }
+
+  .col {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+  }
+
+  /* Reset the dashboard's 3-column .card grid, then style our cards */
+  .card {
+    display: block;
+    grid-template-columns: none;
+    align-items: stretch;
+    gap: 0;
+    min-width: 0;
+    padding: 22px;
     border: 1px solid var(--border);
     border-radius: 12px;
+    background: var(--bg-card);
   }
 
-  #watchlist-table tbody td {
+  .card__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .card__head h2 {
+    font-size: 17px;
+    font-weight: 600;
+  }
+
+  .card__head--bordered {
+    margin-bottom: 0;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ==========================================================
+     Price chart
+     ========================================================== */
+  .chart-card { padding: 20px 20px 14px; }
+
+  .chart {
+    position: relative;
+    height: 400px;
+    padding-right: 56px;
+  }
+
+  .chart svg {
     display: block;
-    width: auto;
-    height: auto;
+    width: 100%;
+    height: 100%;
+  }
+
+  .chart__y {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 52px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: flex-end;
+    font-size: 12px;
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
+  .chart__x {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /* entry / stop / target lines drawn over the chart */
+  .level {
+    position: absolute;
+    left: 0;
+    right: 56px;
+    height: 0;
+    border-top: 1px dashed var(--text-muted);
+    pointer-events: none;
+  }
+
+  .level--entry { border-color: var(--accent-soft); }
+  .level--sl    { border-color: var(--down); }
+  .level--tp    { border-color: var(--up); }
+
+  .level-tag {
+    position: absolute;
+    right: 0;
+    transform: translateY(-50%);
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-inset);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  /* ==========================================================
+     Prediction
+     ========================================================== */
+  .prediction {
+    display: flex;
+    flex-direction: column;
+    row-gap: 22px;
+    padding: 24px;
+  }
+
+  .prediction__head {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  /* default = UP; the DOWN / CONSOLIDATION / none variants are in markets-trade.css */
+  .prediction__icon {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    border: 1px solid var(--up-border);
+    border-radius: 10px;
+    background: var(--up-bg);
+    color: var(--up);
+    font-size: 22px;
+    font-weight: 700;
+  }
+
+  .prediction__text {
+    flex: 1;
     min-width: 0;
-    padding: 0 !important;
-    border: 0;
+  }
+
+  .prediction__text h2 {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .prediction__text p {
+    margin-top: 2px;
     font-size: 14px;
   }
 
-  #watchlist-table tbody td.col-market {
-    grid-area: market;
+  .conf-main__row {
     display: flex;
     align-items: baseline;
-    flex-wrap: wrap;
-    gap: 9px;
-  }
-  .market__name { font-size: 17px; font-weight: 600; white-space: nowrap; }
-  .market__type { font-size: 13px; color: var(--text-light); white-space: nowrap; }
-
-  #watchlist-table tbody td.col-close {
-    grid-area: close;
-    font-size: 17px;
-    font-weight: 700;
-    text-align: right !important;
-    white-space: nowrap;
-  }
-
-  #watchlist-table tbody td.col-pred { grid-area: forecast; }
-  .tag { max-width: 100%; padding: 7px 10px; font-size: 13px; line-height: 1.2; border-radius: 6px; }
-
-  #watchlist-table tbody td.col-change {
-    grid-area: change;
+    justify-content: space-between;
+    margin-bottom: 10px;
     font-size: 15px;
-    font-weight: 600;
-    text-align: right !important;
-    white-space: nowrap;
-  }
-  /* "24h" label before the % change */
-  #watchlist-table tbody td.col-change::before {
-    content: "24h";
-    margin-right: 12px;
-    font-size: 13px;
-    font-weight: 400;
-    color: var(--text-muted);
+    color: var(--text-light);
   }
 
-  /* Remove "x" — always visible in the card's top-right corner.
-     28px tap target, small 12px icon so it clears the price. */
-  #watchlist-table tbody td.col-actions {
-    position: absolute;
-    top: 2px;
-    right: 2px;
-    width: 28px;
-    height: 28px;
-    padding: 0 !important;
-    z-index: 1;
-  }
-  #watchlist-table tbody td.col-actions .btn-remove {
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
-    color: var(--text-muted);
-    font-size: 16px;
-    line-height: 1;
-    opacity: 1;
-    -webkit-tap-highlight-color: transparent;
-  }
-  #watchlist-table tbody td.col-actions .btn-remove svg {
-    width: 12px;
-    height: 12px;
-  }
-  #watchlist-table tbody td.col-actions .btn-remove:active {
-    background: var(--down-bg);
-    color: var(--down);
+  .conf-main__row strong {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--text);
   }
 
-  /* ---------- Dashboard ---------- */
-  .layout {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-  }
-
-  /* Forecasts first, watchlist second, news hidden (it has its own tab) */
-  .main    { order: 1; padding: 20px 20px 0; }
-  .sidebar { order: 2; padding: 24px 20px 0; background: transparent; border: 0; }
-  .news    { display: none; }
-  .chat-usage { display: none; }
-
-  .main__head { margin-bottom: 14px; }
-  .main__head h1 { font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
-  #forecast-sub { display: none; }
-
-  /* Horizontal-scrolling forecast cards */
-  .cards {
-    flex-direction: row;
-    gap: 14px;
-    margin: 0 -20px;
-    padding: 0 20px 4px;
-    overflow-x: auto;
-    scroll-snap-type: x proximity;
-    scrollbar-width: none;
-  }
-  .cards::-webkit-scrollbar { display: none; }
-
-  .cards .card {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 14px;
-    flex: 0 0 232px;
-    padding: 18px;
-    scroll-snap-align: start;
-  }
-  .card__id { gap: 12px; }
-  .card__title { font-size: 17px; }
-  .card__chart { display: none; }
-  .conf__row { flex-direction: row-reverse; }
-  .conf__value { font-size: 28px; font-weight: 700; }
-  .card__conf .progress { margin: 8px 0 0; }
-  .conf__row--small { display: none; }
-
-  /* Watchlist block */
-  .sidebar__head { padding: 0 0 12px; border: 0; }
-  .sidebar__head h2 { font-size: 19px; }
-  .sidebar__head .muted { display: none; }
-  .sidebar__head .see-all { display: inline; }
-
-  .watch {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
+  /* progress bars (override the 132px .bar in watchlist.css) */
+  .bar {
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--track);
     overflow: hidden;
   }
-  .watch__item { padding: 16px 20px; gap: 10px; }
-  .watch__item:last-child { border-bottom: 0; }
-}
 
-@media (max-width: 380px) {
-  .page { padding-left: 12px; padding-right: 12px; }
-  #watchlist-table tbody tr { padding: 17px 13px; column-gap: 6px; }
-  .market__name { font-size: 15px; }
-  .market__type { font-size: 11px; }
-  #watchlist-table tbody td.col-close { font-size: 15px; }
-  .tag { padding: 6px 7px; font-size: 11px; }
-  #watchlist-table tbody td.col-change { font-size: 13px; }
-  .cards .card { flex-basis: 208px; }
-}
+  .bar--lg { height: 10px; }
 
-/* ==========================================================
-   Markets (market detail) — mobile
-   Scoped with the same :has() prefix as markets.css so it
-   wins on specificity and can't leak into other views.
-   ========================================================== */
-@media (max-width: 800px) {
-
-  /* The market screen has its own header, so hide the Molina top bar */
-  body:has(.page > .market-head) .topbar { display: none; }
-
-  .page:has(> .market-head) {
-    & { padding: 18px 16px 24px; }
-
-    .col { gap: 14px; }
-
-    /* ---------- Header: back | title | price, toggles below ---------- */
-    .market-head {
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-bottom: 14px;
-    }
-
-    .market-head__left {
-      width: 100%;
-      flex-wrap: nowrap;
-      gap: 0;
-      align-items: center;
-    }
-
-    .back {
-      width: 32px;
-      height: 32px;
-      margin-right: 14px;
-      border: 0;
-      background: transparent;
-    }
-
-    .market-head__title { flex: 1; min-width: 0; }
-    .market-head__title h1 { font-size: 24px; }
-    .market-head__title p {
-      font-size: 14px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .market-head__price {
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 0;
-      margin: 0 0 0 12px;
-      padding: 0;
-      border: 0;
-    }
-    .price { font-size: 23px; font-weight: 700; white-space: nowrap; }
-    .delta { font-size: 15px; }
-
-    /* Hourly / daily toggles stay, as a row under the header */
-    .market-head__right { width: 100%; gap: 0; }
-    .tf { gap: 8px; }
-    .chip { height: 34px; min-width: 44px; padding: 0 14px; font-size: 14px; }
-
-    /* Ask AI becomes a floating button above the bottom nav */
-    .btn-ai {
-      position: fixed;
-      right: 16px;
-      bottom: calc(96px + env(safe-area-inset-bottom));
-      z-index: 40;
-      width: 56px;
-      height: 56px;
-      margin: 0;
-      padding: 0;
-      justify-content: center;
-      border-radius: 50%;
-      font-size: 0;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-    }
-    .btn-ai svg { width: 24px; height: 24px; }
-
-    /* ---------- Chart: everything stays inside the card ---------- */
-    .chart-card { padding: 12px 12px 8px; overflow: hidden; }
-    .chart-card .card__head { display: none; }
-
-    .chart {
-      height: 300px;
-      padding: 0 50px 0 0;
-      overflow: hidden;
-    }
-    .chart svg { width: 100%; height: 100% !important; overflow: hidden; }
-    .chart__plot,
-    .candles { overflow: hidden; }
-
-    .chart__y { width: 46px; height: 100%; }
-    .chart__y span { font-size: 12px; }
-    .chart__x { display: none; }
-
-    /* trade level lines/pills live in the Trade Setup card on mobile */
-    .level,
-    .level-tag { display: none; }
-
-    /* ---------- Prediction: [UP pill] [62% confidence] / bar / rows ---------- */
-    .prediction {
-      display: grid;
-      grid-template-columns: auto 1fr;
-      grid-template-areas:
-        "tag  conf"
-        "bar  bar"
-        "probs probs";
-      align-items: center;
-      row-gap: 16px;
-      padding: 18px;
-    }
-
-    /* let the header/confidence children sit directly in the grid */
-    .prediction__head,
-    .conf-main { display: contents; }
-
-    .prediction__icon,
-    .prediction__text { display: none; }
-
-    #pred-tag {
-      grid-area: tag;
-      justify-self: start;
-      padding: 14px 22px;
-      border-radius: 8px;
-      font-size: 26px;
-      line-height: 1.1;
-    }
-
-    .conf-main__row {
-      grid-area: conf;
-      flex-direction: column-reverse;
-      align-items: flex-end;
-      margin: 0;
-    }
-    .conf-main__row strong { font-size: 34px; font-weight: 700; line-height: 1.1; }
-    .conf-main__row span { font-size: 15px; }
-
-    .conf-main .bar { grid-area: bar; }
-
-    .probs { grid-area: probs; gap: 12px; }
-    .probs li { grid-template-columns: 124px minmax(0, 1fr) 44px; gap: 10px; }
-    .probs__label { font-size: 13px; white-space: nowrap; }
-    .probs__val { font-size: 15px; }
-
-    /* ---------- Trade setup: collapsible ---------- */
-    .setup { padding: 0 18px; }
-
-    .setup .card__head--bordered {
-      padding: 20px 0;
-      border-bottom: 0;
-      gap: 12px;
-      cursor: pointer;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .setup .card__head--bordered h2 { flex: 1; font-size: 18px; }
-
-    .setup .card__head--bordered::after {
-      content: "";
-      flex-shrink: 0;
-      width: 8px;
-      height: 8px;
-      margin: 0 4px 0 2px;
-      border-right: 2px solid var(--text-light);
-      border-bottom: 2px solid var(--text-light);
-      transform: rotate(45deg) translateY(-2px);
-      transition: transform 0.2s;
-    }
-
-    .setup.is-open { padding-bottom: 18px; }
-    .setup.is-open .card__head--bordered { border-bottom: 1px solid var(--border); }
-    .setup.is-open .card__head--bordered::after { transform: rotate(-135deg) translateY(-2px); }
-
-    .setup:not(.is-open) > :not(.card__head) { display: none; }
-    .setup:not(.is-open) .tag { display: none; }
-
-    .levels strong { font-size: 20px; }
-    .levels__name { font-size: 16px; }
-
-    /* ---------- SMC signals: heading + wrapping pills ---------- */
-    .smc {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      padding: 4px 0 0;
-      background: none;
-      border: 0;
-      border-radius: 0;
-    }
-    .smc h2 { width: 100%; margin-bottom: 4px; font-size: 17px; }
-    .smc__sub { display: none; }
-
-    /* signals become direct flex items so they wrap as pills */
-    .smc__grid,
-    .smc__wide { display: contents; }
-
-    .signal {
-      padding: 0;
-      gap: 0;
-      background: none;
-    }
-    .signal p { display: none; }
-    .signal .tag {
-      padding: 8px 12px;
-      border-radius: 6px;
-      font-size: 14px;
-    }
+  .bar__fill {
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+    transition: width 0.3s ease;
   }
-}
 
-@media (max-width: 380px) {
-  .page:has(> .market-head) {
-    .market-head__title h1 { font-size: 21px; }
-    .price { font-size: 20px; }
-    #pred-tag { padding: 12px 16px; font-size: 22px; }
-    .conf-main__row strong { font-size: 28px; }
-    .probs li { grid-template-columns: 112px minmax(0, 1fr) 40px; gap: 8px; }
+  .bar__fill--accent { background: var(--accent); }
+  .bar__fill--up     { background: var(--up); }
+  .bar__fill--down   { background: var(--down); }
+  .bar__fill--flat   { background: var(--flat); }
+
+  /* up / down / consolidation probability rows */
+  .probs {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
   }
-}
 
-@media (max-width: 800px) {
-
-  /* The chat has its own header; the bottom nav is the way out */
-  body:has(.ai-layout) .topbar { display: none; }
-
-  .page:has(.ai-layout) {
-    /* body already reserves room for the bottom nav (84px + safe area) */
-    & {
-      height: calc(100dvh - 84px - env(safe-area-inset-bottom));
-      min-height: 0;
-      padding: 0;
-      overflow: hidden;
-    }
-
-    .ai-layout { height: 100%; overflow: hidden; }
-    .ai-chat { height: 100%; }
-
-    /* ---------- Header ---------- */
-    .ai-chat__head { height: 56px; padding: 0 16px; gap: 10px; }
-    .ai-chat__head svg { flex-shrink: 0; }
-    .ai-chat__head h1 {
-      font-size: 20px;
-      font-weight: 700;
-      white-space: nowrap;
-    }
-    .ai-chat__ctx {
-      min-width: 0;
-      max-width: 52%;
-      padding: 5px 10px;
-      overflow: hidden;
-      font-size: 13px;
-      text-overflow: ellipsis;
-    }
-
-    /* ---------- Messages ---------- */
-    .ai-chat__scroll {
-      padding: 18px 16px 12px;
-      overscroll-behavior: contain;
-    }
-    .ai-chat__inner { gap: 20px; }
-
-    .ai-msg--user {
-      max-width: 88%;
-      padding: 12px 16px;
-      font-size: 16px;
-    }
-
-    /* AI answers use the full width, with a small icon above */
-    .ai-msg--ai { flex-direction: column; align-items: stretch; gap: 8px; }
-    .ai-msg__avatar {
-      width: 28px;
-      height: 28px;
-      border: 0;
-      background: none;
-    }
-    .ai-msg__avatar svg { width: 22px; height: 22px; }
-    .ai-msg__body { padding-top: 0; font-size: 16px; line-height: 1.5; }
-
-    .ai-steps li { gap: 12px; }
-
-    /* forecast card inside an answer */
-    .ai-fc { gap: 12px; padding: 14px; }
-    .ai-fc__name { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 10px; }
-    .ai-fc__name strong { font-size: 16px; }
-    .ai-fc__row strong { font-size: 20px; }
-    .ai-fc__probs { justify-content: space-between; gap: 6px 12px; font-size: 13px; }
-    .ai-fc__btn { justify-self: stretch; text-align: center; }
-
-    /* ---------- Footer / composer ---------- */
-    .ai-chat__foot {
-      padding: 10px 16px 12px;
-      border-top: 1px solid var(--border);
-    }
-
-    /* Model selector: shrinks to fit instead of pushing off-screen */
-    .ai-model-selector { gap: 8px; min-width: 0; margin-bottom: 10px; }
-    .ai-model-selector label { flex-shrink: 0; font-size: 13px; }
-    .ai-model-select {
-      flex: 1;
-      width: 100%;
-      min-width: 0;
-      max-width: 100%;
-      height: 40px;
-      font-size: 16px;           
-      text-overflow: ellipsis;
-    }
-
-    /* Suggestion chips: one scrollable row */
-    .ai-suggest {
-      flex-wrap: nowrap;
-      gap: 8px;
-      margin: 0 -16px 10px;
-      padding: 0 16px;
-      overflow-x: auto;
-      scrollbar-width: none;
-    }
-    .ai-suggest::-webkit-scrollbar { display: none; }
-    .ai-suggest button { flex: 0 0 auto; height: 40px; white-space: nowrap; }
-
-    .ai-composer { height: 52px; gap: 10px; padding: 0 6px 0 14px; }
-    .ai-composer__input { font-size: 16px; text-overflow: ellipsis; }
-    .ai-composer__left { display: inline; font-size: 12px; }
-    .ai-send { width: 40px; height: 40px; }
-
-    .ai-disclaimer { margin-top: 8px; font-size: 12px; line-height: 1.35; }
+  .probs li {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr) 48px;
+    align-items: center;
+    gap: 16px;
   }
-}
 
-@media (max-width: 380px) {
-  .page:has(.ai-layout) {
-    .ai-composer__left { display: none; }
-    .ai-chat__ctx { max-width: 46%; }
+  .probs__label {
+    font-size: 14px;
+    color: var(--text-light);
   }
-}
 
+  .probs__val {
+    font-size: 15px;
+    font-weight: 600;
+    text-align: right;
+  }
 
-@media (max-width: 800px) {
+  /* ==========================================================
+     Tags (UP / DOWN / CONSOLIDATION pills)
+     ========================================================== */
+  .tag {
+    display: inline-block;
+    padding: 6px 12px;
+    border: 1px solid;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
 
-  /* The settings screen has its own heading; the bottom nav is the way out */
-  body:has(.settings-head) .topbar { display: none; }
+  .tag--sm {
+    padding: 3px 9px;
+    border-radius: 5px;
+    font-size: 12px;
+  }
 
-  .page:has(> .settings-head) {
-    & { padding: 20px 16px 24px; }
+  .tag--up {
+    color: var(--up);
+    background: var(--up-bg);
+    border-color: var(--up-border);
+  }
 
-    /* ---------- Header ---------- */
-    .settings-head { margin-bottom: 16px; }
-    .settings-head h1 { font-size: 26px; }
-    .settings-head p { font-size: 14px; }
+  .tag--neutral {
+    color: var(--text-light);
+    background: #1e2842;
+    border-color: #2c3857;
+  }
 
-    /* ---------- Cards: small uppercase section labels ---------- */
-    .settings-card { margin-bottom: 12px; padding: 16px 18px; }
+  /* ==========================================================
+     Trade setup
+     ========================================================== */
+  .setup { padding: 0 22px 22px; }
 
-    .settings-card h2 {
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--text-muted);
-    }
+  .levels { padding: 4px 0; }
 
-    .settings-card__head { margin-bottom: 12px; }
-    .settings-muted { font-size: 13px; }
+  .levels li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 54px;
+    border-bottom: 1px solid var(--border);
+  }
 
-    /* ---------- Buttons ---------- */
-    .settings-btn { height: 36px; padding: 0 14px; font-size: 14px; }
+  .levels li:last-child { border-bottom: 0; }
 
-    /* ---------- Account rows: label | value | action ---------- */
-    .settings-rows { margin-top: 12px; }
+  .levels__name {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 15px;
+    color: var(--text-light);
+  }
 
-    .settings-row {
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
-      align-items: center;
-      column-gap: 0;
-      row-gap: 6px;
-      min-height: 54px;
-      padding: 8px 0;
-    }
+  .levels strong {
+    font-size: 20px;
+    font-weight: 700;
+  }
 
-    .settings-row__label {
-      grid-column: auto;
-      padding-right: 12px;
-      font-size: 16px;
-      color: var(--text);
-    }
+  .dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--text-muted);
+  }
 
-    .settings-row__value {
-      min-width: 0;
-      justify-self: end;
-      text-align: right;
-      font-size: 15px;
-      font-weight: 400;
-      color: var(--text-light);
-      overflow-wrap: anywhere;
-    }
+  .dot--entry { background: var(--accent-soft); }
+  .dot--sl    { background: var(--down); }
+  .dot--tp    { background: var(--up); }
 
-    .settings-row__value--dots { font-size: 14px; letter-spacing: 0.06em; }
+  .rr {
+    margin-top: 14px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-inset);
+  }
 
-    .settings-row .settings-btn { margin-left: 12px; }
+  .rr__row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    font-size: 14px;
+    color: var(--text-light);
+  }
 
-    /* Delete row: [Delete ........ button] with the description underneath */
-    .settings-row:has(.settings-btn--danger) {
-      grid-template-columns: minmax(0, 1fr) auto;
-      grid-template-areas:
-        "label btn"
-        "desc  desc";
-    }
-    .settings-row:has(.settings-btn--danger) .settings-row__label {
-      grid-area: label;
-      color: var(--down);
-    }
-    .settings-row:has(.settings-btn--danger) .settings-row__value {
-      grid-area: desc;
-      justify-self: start;
-      text-align: left;
-      font-size: 13px;
-      color: var(--text-muted);
-    }
-    .settings-row:has(.settings-btn--danger) .settings-btn {
-      grid-area: btn;
-      margin-left: 0;
-    }
+  .rr__row strong {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+  }
 
-    /* ---------- Toggles ---------- */
-    .settings-toggle { gap: 16px; }
-    .settings-toggle--first { padding: 10px 0 0; }
-    .settings-toggle__text strong { font-size: 16px; }
-    .settings-toggle__text p { margin-top: 2px; font-size: 13px; line-height: 1.4; }
+  .rr__row--small {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
 
-    /* slightly larger switch for thumbs */
-    .settings-switch { width: 50px; height: 30px; }
-    .settings-switch__track::after { width: 24px; height: 24px; }
-    .settings-switch input:checked + .settings-switch__track::after {
-      transform: translateX(20px);
-    }
+  .rr__bar {
+    display: flex;
+    gap: 4px;
+    height: 8px;
+    margin: 12px 0 10px;
+  }
 
-    /* ---------- AI chat usage ---------- */
-    .usage__row { gap: 12px; margin-bottom: 10px; }
-    .usage__row strong { font-size: 16px; }
-    .usage__row .settings-muted { white-space: nowrap; }
+  .rr__risk,
+  .rr__reward {
+    min-width: 6px;
+    border-radius: 999px;
+  }
 
-    /* ---------- Theme: options share the row evenly ---------- */
-    .theme-grid {
-      grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
-      gap: 8px;
-      margin-top: 12px;
-    }
-    .theme-opt {
-      justify-content: center;
-      height: 44px;
-      padding: 0 14px;
-      font-size: 15px;
-    }
+  .rr__risk   { background: var(--down); }
+  .rr__reward { background: var(--up); }
 
-    /* ---------- Log out: full-width primary button ---------- */
-    .settings-btn--wide {
-      display: block;
-      width: 100%;
-      height: 52px;
-      margin-top: 4px;
-      border-color: var(--accent);
-      border-radius: 10px;
-      background: var(--accent);
-      color: #fff;
-      font-size: 16px;
-      font-weight: 700;
-    }
-    .settings-btn--wide:hover {
-      background: var(--accent-hover);
-      color: #fff;
-    }
+  /* ==========================================================
+     SMC signals
+     ========================================================== */
+  .smc h2 {
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .smc__sub {
+    margin-top: 2px;
+    font-size: 14px;
+  }
+
+  .smc__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .smc__wide {
+    display: grid;
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  .smc__grid:empty,
+  .smc__wide:empty { display: none; }
+
+  .signal {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 14px;
+    border-radius: 10px;
+    background: var(--bg-inset);
+  }
+
+  .signal p {
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--text-light);
+  }
+
+  /* ---------- Focus ---------- */
+  .back:focus-visible,
+  .btn-ai:focus-visible,
+  .tf .chip:focus-visible,
+  .setup .card__head--bordered:focus-visible {
+    outline: 2px solid var(--accent-soft);
+    outline-offset: 2px;
+  }
+
+  /* ---------- Narrow desktop / tablet: stack the columns ---------- */
+  @media (max-width: 1180px) {
+    .grid { grid-template-columns: minmax(0, 1fr); }
   }
 }
