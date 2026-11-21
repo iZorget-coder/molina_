@@ -26,7 +26,7 @@ TO_DOWNLOAD = ["sp500_idx", "nasdaq_idx", "dow_idx", "gold"]
 START = date(2021, 11, 11)
 END   = date.today()
 
-# Yahoo 1h data only goes back ~730 days.
+# Yahoo 1h data only goes back ~730 days (fallback only).
 YAHOO_LOOKBACK_DAYS = 729
 
 # Re-fetch the last N days from TradingView so the newest bars overwrite
@@ -35,6 +35,11 @@ TV_OVERLAP_DAYS = 2
 
 # Serial writes; the CSV merge is simpler with 1 worker.
 MAX_WORKERS = 1
+
+# By default the script stops if tvkit is missing, so a broken workflow
+# can't silently fill the CSVs with Yahoo bars. Set ALLOW_YAHOO_ONLY=1
+# to run with Yahoo alone anyway.
+ALLOW_YAHOO_ONLY = os.environ.get("ALLOW_YAHOO_ONLY") == "1"
 
 OUTPUT_COLUMNS = [
     "symbol", "timestamp", "symbol_id", "open", "high", "low", "close",
@@ -65,23 +70,26 @@ def safe_end() -> date:
     return min(END, today_utc - timedelta(days=1))
 
 
-def last_saved_timestamp(csv_path: str):
-    if not os.path.exists(csv_path):
-        return None
-    try:
-        existing = pd.read_csv(csv_path, usecols=["timestamp"])
-        if existing.empty:
-            return None
-        return _to_datetime_series(existing["timestamp"]).max()
-    except Exception as e:
-        print(f"  ⚠️  could not read {csv_path}: {e} — will re-download full history")
-        return None
-
-
 def _latest_ts(*dfs):
     vals = [d["timestamp"].max() for d in dfs
             if d is not None and not d.empty]
     return max(vals) if vals else None
+
+
+def _fill_source(df: pd.DataFrame) -> pd.DataFrame:
+    """Rows written before the `source` column existed are labelled 'unknown'."""
+    if "source" not in df.columns:
+        df["source"] = "unknown"
+    df["source"] = df["source"].fillna("unknown")
+    return df
+
+
+def _tvkit_available() -> bool:
+    try:
+        import tvkit  # noqa: F401
+        return True
+    except ImportError:
+        return False
 
 
 def _finalize_schema(df: pd.DataFrame, csv_symbol_tag: str, source: str) -> pd.DataFrame:
@@ -267,32 +275,48 @@ def download(yahoo_ticker: str, outfile: str,
     tag    = csv_symbol_tag or yahoo_ticker
     target = safe_end()
 
+    # ── 0. LOAD EXISTING CSV ─────────────────────────────────
     existing_df = None
-    resume_from = start
-
     if os.path.exists(outfile):
-        latest = last_saved_timestamp(outfile)
-        if latest is not None:
-            if latest.date() >= target:
-                print(f"  ✅ [{yahoo_ticker}] already up to date "
-                      f"(last bar {latest}), skipping", flush=True)
-                return _ensure_datetime(pd.read_csv(outfile))
-            resume_from = max(start, latest.date() - timedelta(days=TV_OVERLAP_DAYS))
-            print(f"  📂 [{yahoo_ticker}] last bar = {latest} "
-                  f"→ resuming from {resume_from}", flush=True)
-            if latest.date() > datetime.now(timezone.utc).date():
-                print(f"  ⚠️  [{yahoo_ticker}] CSV claims a future timestamp "
-                      f"({latest}); verify before trusting", flush=True)
-            try:
-                existing_df = _ensure_datetime(pd.read_csv(outfile))
-            except Exception as e:
-                print(f"  ⚠️  could not read {outfile}: {e} — treating as missing",
-                      flush=True)
+        try:
+            existing_df = _ensure_datetime(pd.read_csv(outfile))
+            existing_df = existing_df.dropna(subset=["timestamp"]).reset_index(drop=True)
+            if existing_df.empty:
                 existing_df = None
-        else:
-            print(f"  📂 {outfile} empty/unreadable → full download", flush=True)
+        except Exception as e:
+            print(f"  ⚠️  could not read {outfile}: {e} — treating as missing",
+                  flush=True)
+            existing_df = None
     else:
         print(f"  📂 no {outfile} → full download from {start}", flush=True)
+
+    # ── 0b. SELF-HEAL: remove Yahoo-sourced bars from earlier runs ──
+    # Yahoo cash-index bars sit on :30 and are a different instrument from the
+    # TradingView futures bars, so they are dropped and re-fetched from TV.
+    # (If TV still can't supply them, the Yahoo fallback below re-adds them.)
+    if existing_df is not None and tv_symbol and "source" in existing_df.columns:
+        is_yahoo = existing_df["source"].astype(str).str.lower().eq("yahoo")
+        if is_yahoo.any():
+            print(f"  🩹 [{yahoo_ticker}] removing {int(is_yahoo.sum())} "
+                  f"Yahoo-sourced bar(s) so TradingView can replace them",
+                  flush=True)
+            existing_df = existing_df[~is_yahoo].reset_index(drop=True)
+            if existing_df.empty:
+                existing_df = None
+
+    resume_from = start
+    if existing_df is not None:
+        latest = existing_df["timestamp"].max()
+        if latest.date() >= target:
+            print(f"  ✅ [{yahoo_ticker}] already up to date "
+                  f"(last bar {latest}), skipping", flush=True)
+            return _fill_source(existing_df)
+        resume_from = max(start, latest.date() - timedelta(days=TV_OVERLAP_DAYS))
+        print(f"  📂 [{yahoo_ticker}] last bar = {latest} "
+              f"→ resuming from {resume_from}", flush=True)
+        if latest.date() > datetime.now(timezone.utc).date():
+            print(f"  ⚠️  [{yahoo_ticker}] CSV claims a future timestamp "
+                  f"({latest}); verify before trusting", flush=True)
 
     # ── 1. PRIMARY: TradingView ──────────────────────────────
     new_df = pd.DataFrame()
@@ -305,7 +329,7 @@ def download(yahoo_ticker: str, outfile: str,
     known_date = known_ts.date() if known_ts is not None else resume_from
 
     if known_date < target:
-        why = ("TradingView returned nothing" if new_df.empty
+        why = ("TradingView returned nothing" if new_df is None or new_df.empty
                else f"TradingView ended at {known_ts}")
         print(f"  🌐 [{yahoo_ticker}] {why} → Yahoo fallback "
               f"{known_date} → {target}", flush=True)
@@ -322,7 +346,7 @@ def download(yahoo_ticker: str, outfile: str,
                 new_df = pd.concat([new_df, y_df], ignore_index=True)
 
     # ── 3. MERGE (new rows win on duplicate timestamps) ──────
-    if existing_df is not None and not existing_df.empty:
+    if existing_df is not None:
         combined = pd.concat([existing_df, new_df], ignore_index=True)
     else:
         combined = new_df
@@ -331,15 +355,11 @@ def download(yahoo_ticker: str, outfile: str,
         print(f"  ❌ [{yahoo_ticker}] no data at all", flush=True)
         return pd.DataFrame()
 
-    n_before = len(existing_df) if existing_df is not None and not existing_df.empty else 0
+    n_before = len(existing_df) if existing_df is not None else 0
     combined = _ensure_datetime(combined).dropna(subset=["timestamp"])
     combined = (combined.drop_duplicates(subset=["timestamp"], keep="last")
                         .sort_values("timestamp").reset_index(drop=True))
-
-    # Rows written before the `source` column existed
-    if "source" not in combined.columns:
-        combined["source"] = "unknown"
-    combined["source"] = combined["source"].fillna("unknown")
+    combined = _fill_source(combined)
 
     combined["hours_since_prev"] = combined["timestamp"].diff().dt.total_seconds() / 3600
     combined["is_contiguous"]    = combined["hours_since_prev"] == 1
@@ -367,6 +387,7 @@ def fetch_one(key: str):
         return key, yahoo_ticker, outfile, pd.DataFrame()
 
     df = _ensure_datetime(df)
+    df = _fill_source(df)
     df["hours_since_prev"] = df["timestamp"].diff().dt.total_seconds() / 3600
     df["is_contiguous"]    = df["hours_since_prev"] == 1
 
@@ -377,29 +398,21 @@ def fetch_one(key: str):
 
 
 # ─────────────────────────────────────────────────────────────
-# OPTIONAL ONE-TIME REBUILD
-# ─────────────────────────────────────────────────────────────
-
-def backup_existing_csvs():
-    """Move existing H1 CSVs aside so TradingView repopulates them from scratch."""
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    for key in TO_DOWNLOAD:
-        outfile = INSTRUMENTS[key][1]
-        if os.path.exists(outfile):
-            bak = f"{outfile}.{stamp}.bak"
-            os.replace(outfile, bak)
-            print(f"🗄️  {outfile} → {bak}", flush=True)
-
-
-# ─────────────────────────────────────────────────────────────
 # RUN
 # ─────────────────────────────────────────────────────────────
 
 def main():
-    if "--rebuild" in sys.argv:
-        print("♻️  --rebuild: backing up existing CSVs and re-downloading "
-              "from TradingView", flush=True)
-        backup_existing_csvs()
+    if not _tvkit_available():
+        msg = ("tvkit is not installed — add `pip install tvkit` to the "
+               "workflow's install step.")
+        if ALLOW_YAHOO_ONLY:
+            print(f"⚠️  {msg} Continuing with Yahoo only "
+                  f"(ALLOW_YAHOO_ONLY=1).", flush=True)
+        else:
+            print(f"❌ {msg}\n   Stopping so Yahoo bars don't get mixed into "
+                  f"the TradingView data. Set ALLOW_YAHOO_ONLY=1 to override.",
+                  flush=True)
+            sys.exit(1)
 
     t0 = time.time()
     print(f"Target end date (latest completed daily close UTC): "
