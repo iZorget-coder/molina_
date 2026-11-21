@@ -190,23 +190,44 @@ export async function loadDashboardWatchlist() {
 
 /* ---------- Dashboard forecast cards ---------- */
 
+/* 5-point sparkline built from the last 5 daily closes (oldest -> newest) */
+
+const SPARK_W = 200;       // viewBox width
+const SPARK_H = 56;        // viewBox height
+const SPARK_PAD_X = 3;     // keeps the line and its round caps inside the box
+const SPARK_PAD_Y = 7;     // keeps highs/lows off the top/bottom edge
+const SPARK_MAX_GAP_DAYS = 14;
+
+function lastCloses(market, n = 5) {
+  const rows = (Array.isArray(market?.candles) ? market.candles : [])
+    .map(c => ({ t: Date.parse(c?.date), close: Number(c?.close) }))
+    .filter(c => Number.isFinite(c.t) && Number.isFinite(c.close) && c.close > 0)
+    .sort((a, b) => a.t - b.t);
+
+  // keep only the latest continuous run (drops stale history mixed into the array)
+  let start = rows.length - 1;
+  while (start > 0 && rows[start].t - rows[start - 1].t <= SPARK_MAX_GAP_DAYS * 86400000) start--;
+
+  return rows.slice(start).slice(-n).map(c => c.close);
+}
+
 function sparkPolyline(market) {
-  const seedBase = market.symbol.split('').reduce((a, c) => a + c.charCodeAt(0), 7);
-  let seed = seedBase;
-  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const closes = lastCloses(market, 5);
+  if (closes.length < 2) return '';
 
-  const points = [];
-  let y = market.dir === 'up' ? 46 : market.dir === 'down' ? 6 : 40;
+  const lo = Math.min(...closes);
+  const hi = Math.max(...closes);
+  const span = hi - lo;
 
-  for (let i = 0; i < 17; i++) {
-    const x = 2 + (i * 196) / 16;
-    if (market.dir === 'up')        y -= rand() * 2.5;
-    else if (market.dir === 'down') y += rand() * 2.5;
-    else                            y  = 40 + Math.sin(i * 1.7 + seedBase) * 10;
-    const clamped = Math.max(2, Math.min(54, y));
-    points.push(`${x.toFixed(0)},${clamped.toFixed(0)}`);
-  }
-  return points.join(' ');
+  return closes
+    .map((v, i) => {
+      const x = SPARK_PAD_X + (i / (closes.length - 1)) * (SPARK_W - SPARK_PAD_X * 2);
+      const y = span === 0
+        ? SPARK_H / 2
+        : SPARK_PAD_Y + (1 - (v - lo) / span) * (SPARK_H - SPARK_PAD_Y * 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
 }
 
 function cardMarkup(market) {
@@ -222,6 +243,7 @@ function cardMarkup(market) {
     : `${market.confidence}%`;
 
   const sparkDir = market.dir === 'none' ? 'flat' : market.dir;
+  const sparkPoints = sparkPolyline(market);
 
   return `
     <article
@@ -244,10 +266,12 @@ function cardMarkup(market) {
         </div>
       </div>
       <div class="card__chart">
-        <svg viewBox="0 0 200 56" preserveAspectRatio="none" class="spark spark--${sparkDir}">
-          <polyline points="${sparkPolyline(market)}"/>
-        </svg>
-        <span class="chart__label">Last 24 sessions</span>
+        ${sparkPoints
+          ? `<svg viewBox="0 0 200 56" preserveAspectRatio="none" class="spark spark--${sparkDir}" aria-hidden="true">
+               <polyline points="${sparkPoints}"/>
+             </svg>`
+          : ''}
+        <span class="chart__label">${sparkPoints ? 'Last 5 sessions' : 'No recent price data'}</span>
       </div>
     </article>
   `;

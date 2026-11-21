@@ -435,7 +435,7 @@ input {
 .spark {
   width: 100%;
   height: 64px;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .spark polyline {
