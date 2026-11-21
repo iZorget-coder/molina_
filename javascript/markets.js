@@ -25,7 +25,7 @@ const SIGNAL_META = {
   'Liquidity Sweep':{ tone: 'neutral', arrow: '◆', description: 'Liquidity taken at recent extreme' },
 };
 
-const LEVEL_PREFIX = { XAUUSD: '$' };
+const LEVEL_PREFIX = {}; // no currency symbol on trade-setup prices
 
 const isSymbol = (s) => MARKETS.some((m) => m.symbol === s);
 
