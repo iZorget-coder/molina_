@@ -21,7 +21,6 @@
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
-  text-align: right;
 }
 
 .zone-tag[data-zone="fvg"]     { --z: var(--zone-fvg); }

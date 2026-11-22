@@ -390,13 +390,15 @@ function buildSmcOverlay({ set, candles, isH1, PAD, plotW, plotH, plotRight, bar
       const h = Math.max(yB - yT, 1.5);
       const tip = `${bull ? 'Bullish' : 'Bearish'} ${ZONE_NAME[z.kind] || z.kind} · ` +
         `${fmt(z.bottom)} – ${fmt(z.top)} · touched ${z.touches}× · ${z.age}${unit} old`;
-      out.back +=
-        `<g><title>${tip}</title>` +
-        `<rect x="${x0}" y="${yT}" width="${Math.max(plotRight - x0, 1)}" height="${h}" fill="rgba(${rgb},0.10)" ` +
-        `stroke="rgba(${rgb},0.45)" stroke-width="1"${bull ? '' : ' stroke-dasharray="3 3"'}/>` +
-        (z.kind === 'ob' ? `<line x1="${x0}" y1="${yT}" x2="${x0}" y2="${yT + h}" stroke="rgba(${rgb},0.75)" stroke-width="2"/>` : '') +
-        `<text x="${x0 + 4}" y="${h >= 12 ? yT + 10 : yT - 2}" font-size="9" font-family="${CHART_FONT}" fill="rgba(${rgb},0.9)">${bull ? '▲' : '▼'} ${ZONE_LABEL[z.kind] || z.kind}</text>` +
-        '</g>';
+     // after — label right-aligned inside the plot, just left of the gutter
+          const labelY = h >= 12 ? yT + 10 : yT - 2;
+          out.back +=
+            `<g><title>${tip}</title>` +
+            `<rect x="${x0}" y="${yT}" width="${Math.max(plotRight - x0, 1)}" height="${h}" fill="rgba(${rgb},0.10)" ` +
+            `stroke="rgba(${rgb},0.45)" stroke-width="1"${bull ? '' : ' stroke-dasharray="3 3"'}/>` +
+            (z.kind === 'ob' ? `<line x1="${x0}" y1="${yT}" x2="${x0}" y2="${yT + h}" stroke="rgba(${rgb},0.75)" stroke-width="2"/>` : '') +
+            `<text x="${plotRight - 4}" y="${labelY}" text-anchor="end" font-size="9" font-family="${CHART_FONT}" fill="rgba(${rgb},0.9)">${bull ? '▲' : '▼'} ${ZONE_LABEL[z.kind] || z.kind}</text>` +
+            '</g>';
       out.zones += 1;
     });
   }
