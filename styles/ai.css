@@ -161,7 +161,7 @@
 
   .ai-recent__item.is-active {
     background: #1a2338;
-    box-shadow: inset 3px 0 0 var(--accent);
+   
   }
 
   .ai-recent__title {
