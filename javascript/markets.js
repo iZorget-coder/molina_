@@ -517,8 +517,8 @@ function paintChart() {
   }
     //  number of candles to show, depending on the timeframe and whether the chart is narrow or wide
       const COUNTS = {
-        '1D': { narrow: 20, wide: 40 },
-        '1H': { narrow: 20, wide: 75 },
+        '1D': { narrow: 20, wide: 50 },
+        '1H': { narrow: 20, wide: 100 },
       };
       const n = COUNTS[currentTimeframe][narrow ? 'narrow' : 'wide'];
       const candles = rows.slice(-n);
