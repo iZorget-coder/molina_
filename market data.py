@@ -117,7 +117,8 @@ os.makedirs(JOURNAL_DIR, exist_ok=True)
 SWING_LEFT = 3
 SWING_RIGHT = 3
 SWING_LOOKBACK = 72          # bars back to look for "current" swing highs/lows
-ZONE_MAX_AGE = 36            # zone must have become visible within this many bars
+ZONE_MAX_AGE = 150           # H1 zone must have become visible within this many bars (~6 days)
+DAILY_ZONE_MAX_AGE = 120     # daily supply/demand zones considered (~6 months of trading days)
 ZONE_MIN_ATR = 0.10          # ignore FVGs smaller than this
 IFVG_WINDOW = 60
 BREAKER_WINDOW = 30
@@ -145,13 +146,16 @@ FEATURE_COLUMNS = (
     [f"k_{k}" for k in H1_KINDS] + [f"s_{s}" for s in H1_SESSIONS] +
     ["kz_london", "kz_nyam", "kz_sb", "hour_sin", "hour_cos",
      "zone_age", "zone_form_age", "zone_width_atr", "zone_disp", "inside_now", "confluence_n",
+     "zone_touches", "zone_fresh",
      "e_frac", "entry_dist_atr", "stop_swing", "risk_atr",
      "target_rank", "reward_atr", "rr", "target_eq",
      "trend_aligned", "bos_aligned", "bars_since_bos", "range_pos",
      "mom3", "mom12", "recent_range_atr", "atr_pct", "side_sign",
      "prob_up", "prob_down", "prob_cons", "macro_aligned", "dealing_fav",
      "d_pdh", "d_pdl", "in_daily_zone", "daily_zone_dist_atr",
-     "d_sweep", "d_bos", "d_choch", "d_breaker", "d_ifvg"]
+     "d_sweep", "d_bos", "d_choch", "d_breaker", "d_ifvg",
+     "dz_in", "dz_dist_atr", "dz_touches", "dz_age", "dz_width_atr", "dz_disp", "dz_n_near",
+     "dz_opp_dist_r", "dz_k_fvg", "dz_k_ob", "dz_k_ifvg", "dz_k_breaker", "dz_k_sweep"]
 )
 COL = {c: i for i, c in enumerate(FEATURE_COLUMNS)}
 
@@ -169,7 +173,7 @@ def _sess(hr: int) -> str:
 # ============================================
 # H1 PREP: swings, structure, causal zones
 # ============================================
-def prep_hourly(h: pd.DataFrame) -> dict:
+def _prep_core(h: pd.DataFrame, hour, date, max_age: int, label: str) -> dict:
     t0 = time.time()
     o = h["open"].to_numpy(float); hi = h["high"].to_numpy(float)
     lo = h["low"].to_numpy(float); c = h["close"].to_numpy(float)
@@ -182,8 +186,7 @@ def prep_hourly(h: pd.DataFrame) -> dict:
     disp = np.abs(body) > 1.5 * np.nan_to_num(avg_body, nan=np.inf)
     P = {"n": n, "o": o, "h": hi, "l": lo, "c": c, "atr": atr, "body": body,
          "avg_body": avg_body, "disp": disp,
-         "hour": h["hour_utc"].to_numpy(int),
-         "date": h["timestamp"].dt.tz_convert(None).to_numpy().astype("datetime64[D]")}
+         "hour": hour, "date": date}
 
     sh, sl = [], []
     for i in range(SWING_LEFT, n - SWING_RIGHT):
@@ -197,10 +200,24 @@ def prep_hourly(h: pd.DataFrame) -> dict:
         P[name + "_conf"] = P[name + "_idx"] + SWING_RIGHT   # known only after `right` bars
 
     _structure(P)
-    P["Z"] = _detect_zones(P)
+    P["Z"] = _detect_zones(P, max_age)
     nz = sum(len(v) for v in P["Z"].values())
-    print(f"   ✅ H1 prep: {n} bars, {nz} causal zones ({time.time() - t0:.1f}s)")
+    print(f"   ✅ {label} prep: {n} bars, {nz} causal zones ({time.time() - t0:.1f}s)")
     return P
+
+
+def prep_hourly(h: pd.DataFrame) -> dict:
+    return _prep_core(h, h["hour_utc"].to_numpy(int),
+                      h["timestamp"].dt.tz_convert(None).to_numpy().astype("datetime64[D]"),
+                      ZONE_MAX_AGE, "H1")
+
+
+def prep_daily(d: pd.DataFrame) -> dict:
+    """Same causal zone detection on the daily chart (supply/demand: FVG, OB, IFVG, breaker, sweep)."""
+    h = pd.DataFrame({"open": d["Open"].to_numpy(float), "high": d["High"].to_numpy(float),
+                      "low": d["Low"].to_numpy(float), "close": d["Close"].to_numpy(float)})
+    return _prep_core(h, np.zeros(len(h), int), d["Date"].to_numpy().astype("datetime64[D]"),
+                      DAILY_ZONE_MAX_AGE, "Daily")
 
 
 def _structure(P: dict):
@@ -231,7 +248,7 @@ def _first_close_through(c, start, end, level, below):
     return start + int(m.argmax()) if m.any() else None
 
 
-def _detect_zones(P: dict) -> dict:
+def _detect_zones(P: dict, max_age: int = ZONE_MAX_AGE) -> dict:
     h, l, c, atr, body = P["h"], P["l"], P["c"], P["atr"], P["body"]
     avg, disp, n = P["avg_body"], P["disp"], P["n"]
     raw = []
@@ -299,10 +316,10 @@ def _detect_zones(P: dict) -> dict:
     Z = {}
     for z in raw:
         if z["dir"] == "bull":
-            z["inv"] = _first_close_through(c, z["known"] + 1, z["known"] + ZONE_MAX_AGE + 2,
+            z["inv"] = _first_close_through(c, z["known"] + 1, z["known"] + max_age + 2,
                                             z["bottom"], True)
         else:
-            z["inv"] = _first_close_through(c, z["known"] + 1, z["known"] + ZONE_MAX_AGE + 2,
+            z["inv"] = _first_close_through(c, z["known"] + 1, z["known"] + max_age + 2,
                                             z["top"], False)
         Z.setdefault(z["known"], []).append(z)
     return Z
@@ -347,14 +364,48 @@ def daily_base_ctx(frame: pd.DataFrame) -> dict:
     }
 
 
-def daily_ctx_at(B: dict, i: int, probs: dict, side: str) -> dict:
+def _daily_zone_lists(dP: dict, di: int, side: str):
+    """Valid (not closed-through) daily zones at completed daily bar di, split into zones that
+    support the trade direction (demand for LONG / supply for SHORT) and opposing ones."""
+    memo = dP.setdefault("_memo", {})
+    key = (di, side)
+    if key in memo:
+        return memo[key]
+    long = side == "LONG"
+    al, op = [], []
+    hh, ll = dP["h"], dP["l"]
+    for k in range(max(0, di - DAILY_ZONE_MAX_AGE), di + 1):
+        for z in dP["Z"].get(k, ()):
+            if z["inv"] is not None and z["inv"] <= di:
+                continue
+            sh_, sl_ = hh[z["known"] + 1:di + 1], ll[z["known"] + 1:di + 1]
+            touches = int(((sl_ <= z["top"]) & (sh_ >= z["bottom"])).sum()) if len(sh_) else 0
+            info = {"kind": z["kind"], "top": z["top"], "bottom": z["bottom"], "touches": min(touches, 10),
+                    "age": di - z["known"], "disp": z.get("disp", 0.0)}
+            (al if (z["dir"] == "bull") == long else op).append(info)
+    memo[key] = (al, op)
+    return al, op
+
+
+def daily_zone_summary(dP: dict, di: int, close: float, n: int = 3):
+    """Nearest valid daily demand (below price) and supply (above price) zones, for display."""
+    dem, _ = _daily_zone_lists(dP, di, "LONG")
+    sup, _ = _daily_zone_lists(dP, di, "SHORT")
+    dem = sorted([z for z in dem if z["bottom"] <= close], key=lambda z: close - min(z["top"], close))[:n]
+    sup = sorted([z for z in sup if z["top"] >= close], key=lambda z: max(z["bottom"], close) - close)[:n]
+    return dem, sup
+
+
+def daily_ctx_at(B: dict, i: int, probs: dict, side: str, dP: dict = None, di: int = None) -> dict:
     long = side == "LONG"
     nz = lambda v: 0.0 if v is None or np.isnan(v) else float(v)
     if long:
         ranges = [(B["fvg_bull_bot"][i], B["fvg_bull_top"][i]), (B["ob_bull_bot"][i], B["ob_bull_top"][i])]
     else:
         ranges = [(B["fvg_bear_bot"][i], B["fvg_bear_top"][i]), (B["ob_bear_bot"][i], B["ob_bear_top"][i])]
+    dz_al, dz_op = _daily_zone_lists(dP, di, side) if dP is not None and di is not None else ([], [])
     return {
+        "dz_al": dz_al, "dz_op": dz_op,
         "prob_up": float(probs.get("UP", 0.33)), "prob_down": float(probs.get("DOWN", 0.33)),
         "prob_cons": float(probs.get("CONSOLIDATION", 0.34)),
         "dealing_pos": nz(B["dealing_pos"][i]) if not np.isnan(B["dealing_pos"][i]) else 0.5,
@@ -436,6 +487,34 @@ def _features(P, t, side, z, E, S, T, rr, e_frac, s_style, rank, is_eq, ctx, con
     f["daily_zone_dist_atr"] = best; f["in_daily_zone"] = float(best <= 0.1)
     for k in ("d_sweep", "d_bos", "d_choch", "d_breaker", "d_ifvg"):
         f[k] = ctx[k]
+    # H1 zone mitigation: how many bars have already traded into it since it formed
+    seg_h, seg_l = P["h"][z["known"] + 1:t + 1], P["l"][z["known"] + 1:t + 1]
+    tb = int(((seg_l <= z["top"]) & (seg_h >= z["bottom"])).sum()) if len(seg_h) else 0
+    f["zone_touches"] = float(min(tb, 10)); f["zone_fresh"] = float(tb == 0)
+    # daily supply/demand context
+    for k in ("dz_in", "dz_touches", "dz_age", "dz_width_atr", "dz_disp", "dz_n_near",
+              "dz_k_fvg", "dz_k_ob", "dz_k_ifvg", "dz_k_breaker", "dz_k_sweep"):
+        f[k] = 0.0
+    f["dz_dist_atr"] = 5.0; f["dz_opp_dist_r"] = 10.0
+    if d_atr and not np.isnan(d_atr) and d_atr > 0:
+        near = None
+        for dz in ctx.get("dz_al", ()):
+            dd = max(dz["bottom"] - E, E - dz["top"], 0.0) / d_atr
+            if dd <= 1.0:
+                f["dz_n_near"] += 1
+            if near is None or (dd, dz["age"]) < (near[0], near[1]["age"]):
+                near = (dd, dz)
+        if near is not None:
+            dd, dz = near
+            f["dz_dist_atr"] = min(dd, 5.0); f["dz_in"] = float(dd <= 0.05)
+            f["dz_touches"] = float(dz["touches"]); f["dz_age"] = float(min(dz["age"], DAILY_ZONE_MAX_AGE))
+            f["dz_width_atr"] = (dz["top"] - dz["bottom"]) / d_atr; f["dz_disp"] = float(dz["disp"])
+            f["dz_k_" + dz["kind"]] = 1.0
+        risk = abs(E - S)
+        gaps = [(oz["bottom"] - E) if side == "LONG" else (E - oz["top"]) for oz in ctx.get("dz_op", ())]
+        gaps = [g for g in gaps if g > 0]
+        if gaps and risk > 0:
+            f["dz_opp_dist_r"] = min(min(gaps) / risk, 10.0)
     return np.nan_to_num(np.array([f[k] for k in FEATURE_COLUMNS], dtype=float))
 
 
@@ -556,7 +635,7 @@ def _simulate(P: dict, t: int, side: str, E: float, S: float, T: float):
 # ============================================
 # TRAINING SET + MODEL
 # ============================================
-def build_training_set(P, B, probs, index_name, sample_every=SAMPLE_EVERY) -> pd.DataFrame:
+def build_training_set(P, B, probs, index_name, dP=None, sample_every=SAMPLE_EVERY) -> pd.DataFrame:
     t0 = time.time()
     n = P["n"]
     d_idx = np.searchsorted(B["dates"], P["date"], side="left") - 1   # last COMPLETED daily bar
@@ -567,7 +646,7 @@ def build_training_set(P, B, probs, index_name, sample_every=SAMPLE_EVERY) -> pd
             continue
         p = probs[di]
         side = "LONG" if p[2] >= p[0] else "SHORT"
-        ctx = daily_ctx_at(B, di, {"DOWN": p[0], "CONSOLIDATION": p[1], "UP": p[2]}, side)
+        ctx = daily_ctx_at(B, di, {"DOWN": p[0], "CONSOLIDATION": p[1], "UP": p[2]}, side, dP=dP, di=di)
         local = []
         for cd in _candidates(P, t, side, ctx):
             sim = _simulate(P, t, side, cd["entry"], cd["stop"], cd["target"])
@@ -655,9 +734,11 @@ def _fallback_candidate(P: dict, t: int, side: str):
     if not atr > 0:
         atr = c_t * 0.003
     best = None
-    for k in range(max(0, t - 2 * ZONE_MAX_AGE), t + 1):
+    for k in range(max(0, t - ZONE_MAX_AGE), t + 1):
         for z in P["Z"].get(k, ()):
             if (z["dir"] == "bull") != long:
+                continue
+            if z["inv"] is not None and z["inv"] <= t:
                 continue
             ref = z["top"] if long else z["bottom"]
             if (long and ref > c_t) or ((not long) and ref < c_t):
@@ -2627,6 +2708,7 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
     df_model = df_all.dropna(subset=['Target']).reset_index(drop=True)
     df_model['Target'] = df_model['Target'].astype(int)
     df_live = df_all[df_all['Target'].isna()].reset_index(drop=True)
+    d_P = prep_daily(df_all)     # df_model is a prefix of df_all, so daily bar indexes line up
 
     print(f"\n✅ Features created ({len(feature_columns)} total) | "
           f"Training rows: {len(df_model)} | Live rows: {len(df_live)}")
@@ -2662,7 +2744,7 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
         print("\n🎯 Training intraday H1 trade model (simulated entries)...")
         daily_base = daily_base_ctx(df_model)
         oof = oof_daily_probs(df_model, feature_columns)
-        train_df = build_training_set(h1_P, daily_base, oof, index_name)
+        train_df = build_training_set(h1_P, daily_base, oof, index_name, dP=d_P)
         h1_model = train_model(train_df, index_name)
 
     journal_state = {'cals': None, 'meta': None}
@@ -2743,7 +2825,8 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
         target_src = '3 ATR fallback'
         ob_style = 'auto'; zone_strength = np.nan
         if HAS_HOURLY and HOURLY_OPT_ENABLED:
-            ctx = daily_ctx_at(daily_base_ctx(row), 0, probs, side)
+            d_i = int(df_all.index[df_all['Date'] == row['Date'].iloc[0]][0])
+            ctx = daily_ctx_at(daily_base_ctx(row), 0, probs, side, dP=d_P, di=d_i)
             pick, _ = pick_live_trade(h1_P, len(hourly_df) - 1, side, ctx, h1_model)
             entry, stop_loss, take_profit = pick['entry'], pick['stop'], pick['target']
             entry_type, stop_src, target_src = pick['entry_type'], pick['stop_source'], pick['target_source']
@@ -2895,6 +2978,15 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
             f"\n🔔 Active SMC signals: "
             f"{', '.join(signals) if signals else 'None'}"
         )
+
+        # Daily supply / demand zones near price
+        _di = int(df_all.index[df_all['Date'] == input_date_actual][0])
+        _dem, _sup = daily_zone_summary(d_P, _di, float(close_t))
+        _fmt = lambda zs: ' | '.join(
+            f"{z['kind'].upper()} {z['bottom']:.2f}-{z['top']:.2f} (touched {z['touches']}x, {z['age']}d old)"
+            for z in zs) or 'none'
+        print(f"\n🟩 Daily demand below: {_fmt(_dem)}")
+        print(f"🟥 Daily supply above: {_fmt(_sup)}")
 
         # Trade recommendation
         baseline = recommend_trade_entry(row, probs)
