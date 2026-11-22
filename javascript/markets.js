@@ -515,7 +515,7 @@ function paintChart() {
       'Check the source CSV for zero, negative or off-scale prices.'
     );
   }
-
+    //  number of candles to show, depending on the timeframe and whether the chart is narrow or wide
       const COUNTS = {
         '1D': { narrow: 20, wide: 40 },
         '1H': { narrow: 20, wide: 40 },
