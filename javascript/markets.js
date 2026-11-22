@@ -516,7 +516,12 @@ function paintChart() {
     );
   }
 
- const candles = narrow ? rows.slice(-50) : rows.slice(-100);
+      const COUNTS = {
+        '1D': { narrow: 40, wide: 100 },
+        '1H': { narrow: 30, wide: 50 },
+      };
+      const n = COUNTS[currentTimeframe][narrow ? 'narrow' : 'wide'];
+      const candles = rows.slice(-n);
 
   if (titleEl) {
     titleEl.textContent = `Price, ${candles.length} ${isH1 ? 'hourly' : 'daily'} candles`;
