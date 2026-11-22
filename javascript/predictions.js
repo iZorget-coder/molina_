@@ -95,18 +95,52 @@ function normaliseTrade(t) {
   if (!t || typeof t !== 'object') return null;
   const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
   return {
-    action: t.action ? String(t.action).toUpperCase() : null,    
-    conviction: t.conviction ?? null,                           
+    action: t.action ? String(t.action).toUpperCase() : null,
+    conviction: t.conviction ?? null,
     entry: num(t.entry),
     stopLoss: num(t.stop_loss),
     takeProfit: num(t.take_profit),
-    risk: num(t.risk),                                          
-    reward: num(t.reward),                                      
+    risk: num(t.risk),
+    reward: num(t.reward),
     riskReward: num(t.risk_reward),
     entryType: t.entry_type ?? null,
     stopSource: t.stop_source ?? null,
     targetSource: t.target_source ?? null,
   };
+}
+
+// The "smc" map the pipeline stores next to each prediction: chart drawings for the daily and H1
+// charts (zones, liquidity levels, last structure break, sweeps). Anything malformed is dropped,
+// and older documents without "smc" simply give null (the chart toggle is then disabled).
+function normaliseSmcSet(s) {
+  if (!s || typeof s !== 'object') return null;
+  const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+  const list = (a, ok) => (Array.isArray(a) ? a.filter((x) => x && typeof x === 'object' && ok(x)) : []);
+  return {
+    zones: list(s.zones, (z) =>
+      isNum(z.top) && isNum(z.bottom) && typeof z.start === 'string' &&
+      (z.dir === 'bull' || z.dir === 'bear') && typeof z.kind === 'string'
+    ).map((z) => ({
+      kind: z.kind,
+      dir: z.dir,
+      top: z.top,
+      bottom: z.bottom,
+      start: z.start,
+      touches: isNum(z.touches) ? z.touches : 0,
+      age: isNum(z.age) ? z.age : 0,
+    })),
+    levels: list(s.levels, (l) => isNum(l.price) && typeof l.start === 'string' && (l.type === 'bsl' || l.type === 'ssl')),
+    structure: list(s.structure, (b) =>
+      isNum(b.price) && typeof b.from === 'string' && typeof b.to === 'string' &&
+      (b.dir === 'bull' || b.dir === 'bear') && typeof b.type === 'string'
+    ),
+    sweeps: list(s.sweeps, (w) => isNum(w.price) && typeof w.time === 'string' && (w.dir === 'bull' || w.dir === 'bear')),
+  };
+}
+
+function normaliseSmc(smc) {
+  if (!smc || typeof smc !== 'object') return null;
+  return { daily: normaliseSmcSet(smc.daily), h1: normaliseSmcSet(smc.h1) };
 }
 
 
@@ -160,6 +194,7 @@ function normalise(docId, data, olderPredictions) {
   closeDate,
   trade: normaliseTrade(p?.trade),
   signals: Array.isArray(p?.signals) ? p.signals : [],
+  smc: normaliseSmc(p?.smc),
   candles: Array.isArray(p?.candles) ? p.candles : [],
   candlesH1: Array.isArray(p?.candlesH1) ? p.candlesH1 : [],
   change,
@@ -213,7 +248,7 @@ export function fetchLatestPredictions({ force = false } = {}) {
 
   inflight = (async () => {
     await authReady;
-    
+
     const q = query(collection(db, 'daily_predictions'), orderBy('generated_at', 'desc'), limit(5));
     const snap = await getDocs(q);
     if (snap.empty) return null;

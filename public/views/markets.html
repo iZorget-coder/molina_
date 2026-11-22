@@ -37,7 +37,21 @@
       <section class="card chart-card">
         <div class="card__head">
           <h2 id="chart-title">Price, 100 daily candles</h2>
-          <span class="muted" id="chart-last-date">Last session: —</span>
+          <div class="card__head-right">
+            <span class="muted" id="chart-last-date">Last session: —</span>
+            <button type="button" class="smc-toggle" id="smc-toggle" aria-pressed="false"
+                    title="Show model-detected SMC zones on the chart">
+              <span class="smc-toggle__track" aria-hidden="true"><i></i></span>SMC
+            </button>
+          </div>
+        </div>
+
+        <!-- Layer chips: only visible while the SMC overlay is on -->
+        <div class="smc-layers" id="smc-layers" hidden>
+          <button type="button" class="chip-sm is-active" data-smc-layer="zones"     aria-pressed="true">Zones</button>
+          <button type="button" class="chip-sm is-active" data-smc-layer="levels"    aria-pressed="true">Liquidity</button>
+          <button type="button" class="chip-sm is-active" data-smc-layer="structure" aria-pressed="true">Structure</button>
+          <span class="smc-layers__note" id="smc-note"></span>
         </div>
         <div class="chart">
           <svg id="price-chart" viewBox="0 0 1000 400" preserveAspectRatio="none" style="width:100%;height:400px;display:block;"></svg>

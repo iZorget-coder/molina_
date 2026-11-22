@@ -308,6 +308,182 @@ function niceTicks(lo, hi, target) {
   return { ticks: ticks.length ? ticks : [lo, hi], decimals };
 }
 
+/* ==========================================================
+   SMC overlay (subtle, optional)
+
+   The model exports a small set of drawings per timeframe
+   (m.smc.daily / m.smc.h1): the nearest still-valid zones, the
+   nearest unswept liquidity, the last structure break and recent
+   sweeps. They are drawn faintly *behind* the candles; hover any
+   of them for the details. Everything is toggled from the chart
+   header and remembered in localStorage.
+   ========================================================== */
+
+const SMC_STORE = 'molina:smc';
+const smcState = { on: false, layers: { zones: true, levels: true, structure: true } };
+
+const RGB = { bull: '34,197,94', bear: '239,68,68', mute: '169,178,199', amber: '245,158,11' };
+const ZONE_LABEL = { fvg: 'FVG', ob: 'OB', ifvg: 'IFVG', breaker: 'BRK' };
+const ZONE_NAME = { fvg: 'fair value gap', ob: 'order block', ifvg: 'inverse FVG', breaker: 'breaker block' };
+
+function loadSmcState() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SMC_STORE) || 'null');
+    if (!s) return;
+    if (typeof s.on === 'boolean') smcState.on = s.on;
+    Object.keys(smcState.layers).forEach((k) => {
+      if (typeof s.layers?.[k] === 'boolean') smcState.layers[k] = s.layers[k];
+    });
+  } catch { /* storage unavailable - keep defaults */ }
+}
+
+function saveSmcState() {
+  try { localStorage.setItem(SMC_STORE, JSON.stringify(smcState)); } catch { /* ignore */ }
+}
+
+const toMs = (v) =>
+  typeof v === 'string' ? Date.parse(/^\d{4}-\d{2}-\d{2} /.test(v) ? v.replace(' ', 'T') : v) : NaN;
+
+/** Build the SVG for the overlay. `back` goes under the candles, `front` over them. */
+function buildSmcOverlay({ set, candles, isH1, PAD, plotW, plotH, plotRight, barW, y, lo, hi, layers }) {
+  const out = { back: '', front: '', zones: 0, levels: 0 };
+  if (!set || !candles.length) return out;
+
+  const keyOf = (c) => (isH1 ? c.time : c.date);
+  const tms = candles.map((c) => toMs(keyOf(c)));
+  const first = tms[0];
+  const last = tms[tms.length - 1];
+  const idxAt = (v) => {
+    const t = toMs(v);
+    if (!Number.isFinite(t) || t > last) return null;
+    if (t <= first) return 0;
+    const i = tms.findIndex((x) => x >= t);
+    return i < 0 ? null : i;
+  };
+  const xl = (i) => PAD.left + i * barW;
+  const xc = (i) => PAD.left + i * barW + barW / 2;
+  const inView = (a, b) => b >= lo && a <= hi;
+  const unit = isH1 ? 'h' : 'd';
+
+  out.back += `<defs><clipPath id="smc-clip"><rect x="${PAD.left}" y="${PAD.top}" width="${plotW}" height="${plotH}"/></clipPath></defs><g clip-path="url(#smc-clip)">`;
+
+  if (layers.zones) {
+    (set.zones || []).slice(0, 5).forEach((z) => {
+      if (!inView(z.bottom, z.top)) return;
+      const i = idxAt(z.start);
+      if (i === null) return;
+      const rgb = z.dir === 'bull' ? RGB.bull : RGB.bear;
+      const dashed = z.kind === 'ifvg' || z.kind === 'breaker';
+      const yT = y(Math.min(z.top, hi));
+      const yB = y(Math.max(z.bottom, lo));
+      const x0 = xl(i);
+      const h = Math.max(yB - yT, 1.5);
+      const tip = `${z.dir === 'bull' ? 'Bullish' : 'Bearish'} ${ZONE_NAME[z.kind] || z.kind} · ` +
+        `${fmt(z.bottom)} – ${fmt(z.top)} · touched ${z.touches}× · ${z.age}${unit} old`;
+      out.back +=
+        `<g><title>${tip}</title>` +
+        `<rect x="${x0}" y="${yT}" width="${Math.max(plotRight - x0, 1)}" height="${h}" fill="rgba(${rgb},0.07)"` +
+        (dashed ? ` stroke="rgba(${rgb},0.35)" stroke-dasharray="3 3"` : '') + '/>' +
+        (z.kind === 'ob' ? `<line x1="${x0}" y1="${yT}" x2="${x0}" y2="${yT + h}" stroke="rgba(${rgb},0.45)" stroke-width="2"/>` : '') +
+        `<text x="${x0 + 4}" y="${h >= 12 ? yT + 10 : yT - 2}" font-size="9" font-family="${CHART_FONT}" fill="rgba(${rgb},0.75)">${ZONE_LABEL[z.kind] || z.kind}</text>` +
+        '</g>';
+      out.zones += 1;
+    });
+  }
+
+  if (layers.levels) {
+    (set.levels || []).forEach((l) => {
+      if (l.price < lo || l.price > hi) return;
+      const i = idxAt(l.start);
+      if (i === null) return;
+      const yy = y(l.price);
+      const bsl = l.type === 'bsl';
+      out.back +=
+        `<g><title>${bsl ? 'Buy-side liquidity (unswept high)' : 'Sell-side liquidity (unswept low)'} · ${fmt(l.price)}</title>` +
+        `<line x1="${xc(i)}" y1="${yy}" x2="${plotRight}" y2="${yy}" stroke="rgba(${RGB.mute},0.4)" stroke-dasharray="1 4" stroke-linecap="round"/>` +
+        `<text x="${plotRight - 4}" y="${yy - 3}" text-anchor="end" font-size="9" font-family="${CHART_FONT}" fill="rgba(${RGB.mute},0.6)">${bsl ? 'BSL' : 'SSL'}</text></g>`;
+      out.levels += 1;
+    });
+
+    (set.sweeps || []).forEach((sw) => {
+      if (sw.price < lo || sw.price > hi) return;
+      const i = idxAt(sw.time);
+      if (i === null) return;
+      const cx = xc(i);
+      const cy = y(sw.price) + (sw.dir === 'bear' ? -6 : 6);
+      out.front +=
+        `<g><title>Liquidity sweep (${sw.dir === 'bear' ? 'highs' : 'lows'} taken) · ${fmt(sw.price)}</title>` +
+        `<path d="M${cx} ${cy - 3} L${cx + 3} ${cy} L${cx} ${cy + 3} L${cx - 3} ${cy} Z" fill="rgba(${RGB.amber},0.6)"/></g>`;
+      out.levels += 1;
+    });
+  }
+
+  if (layers.structure) {
+    (set.structure || []).forEach((st) => {
+      if (st.price < lo || st.price > hi) return;
+      const i0 = idxAt(st.from);
+      const i1 = idxAt(st.to);
+      if (i0 === null || i1 === null || i1 <= i0) return;
+      const rgb = st.dir === 'bull' ? RGB.bull : RGB.bear;
+      const yy = y(st.price);
+      out.back +=
+        `<g><title>${st.dir === 'bull' ? 'Bullish' : 'Bearish'} ${st.type} · broke ${fmt(st.price)}</title>` +
+        `<line x1="${xc(i0)}" y1="${yy}" x2="${xc(i1)}" y2="${yy}" stroke="rgba(${rgb},0.5)" stroke-dasharray="4 3"/>` +
+        `<text x="${(xc(i0) + xc(i1)) / 2}" y="${yy - 3}" text-anchor="middle" font-size="9" font-family="${CHART_FONT}" fill="rgba(${rgb},0.7)">${st.type}</text></g>`;
+      out.levels += 1;
+    });
+  }
+
+  out.back += '</g>';
+  return out;
+}
+
+function syncSmcControls() {
+  const btn = $('smc-toggle');
+  const layersEl = $('smc-layers');
+  const has = Boolean(currentMarket?.smc);
+  const active = has && smcState.on;
+
+  if (btn) {
+    btn.disabled = !has;
+    btn.setAttribute('aria-pressed', String(active));
+    btn.title = has ? 'Show model-detected SMC zones on the chart' : 'SMC drawings appear after the next model run';
+  }
+  if (layersEl) {
+    layersEl.hidden = !active;
+    layersEl.querySelectorAll('[data-smc-layer]').forEach((b) => {
+      const on = smcState.layers[b.dataset.smcLayer] !== false;
+      b.classList.toggle('is-active', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
+  }
+  if (!active) setText('smc-note', '');
+}
+
+function bindSmcControls() {
+  const btn = $('smc-toggle');
+  if (btn && !btn.dataset.bound) {
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', () => {
+      smcState.on = !smcState.on;
+      saveSmcState();
+      syncSmcControls();
+      paintChart();
+    });
+  }
+  document.querySelectorAll('[data-smc-layer]').forEach((b) => {
+    if (b.dataset.bound) return;
+    b.dataset.bound = '1';
+    b.addEventListener('click', () => {
+      const k = b.dataset.smcLayer;
+      smcState.layers[k] = !(smcState.layers[k] !== false);
+      saveSmcState();
+      syncSmcControls();
+      paintChart();
+    });
+  });
+}
+
 function paintChart() {
   const svg = $('price-chart');
   const lastDateEl = $('chart-last-date');
@@ -424,6 +600,7 @@ function paintChart() {
   const bodyW = Math.min(Math.max(barW * 0.62, 1.5), 14);
 
   let html = '';
+  let smcFront = '';
 
   /* ----- Gridlines + price axis ----- */
   ticks.forEach((price) => {
@@ -432,6 +609,20 @@ function paintChart() {
     html += `<line x1="${PAD.left}" y1="${yPix}" x2="${plotRight}" y2="${yPix}" stroke="#1b2540" stroke-width="1"/>`;
     html += `<text x="${PAD.left - 8}" y="${yPix + 4}" text-anchor="end" fill="#8b95ad" font-size="${CHART_FONT_SIZE}" font-family="${CHART_FONT}">${fmtTick(price)}</text>`;
   });
+
+  /* ----- SMC overlay: zones / lines sit behind the candles ----- */
+  if (smcState.on && m?.smc) {
+    const ov = buildSmcOverlay({
+      set: m.smc[isH1 ? 'h1' : 'daily'], candles, isH1,
+      PAD, plotW, plotH, plotRight, barW, y, lo, hi, layers: smcState.layers,
+    });
+    html += ov.back;
+    smcFront = ov.front;
+    const parts = [];
+    if (ov.zones) parts.push(`${ov.zones} zone${ov.zones === 1 ? '' : 's'}`);
+    if (ov.levels) parts.push(`${ov.levels} level${ov.levels === 1 ? '' : 's'}`);
+    setText('smc-note', parts.length ? parts.join(' · ') : 'Nothing to draw in view');
+  }
 
   /* ----- Candles (now end before the right gutter) ----- */
   candles.forEach((c, i) => {
@@ -446,6 +637,8 @@ function paintChart() {
     const bodyH = Math.max(bodyBot - bodyTop, 1);
     html += `<rect x="${x - bodyW / 2}" y="${bodyTop}" width="${bodyW}" height="${bodyH}" fill="${color}"/>`;
   });
+
+  html += smcFront;
 
   /* ----- Entry / stop / target ----- */
   const LABEL_H = 16;
@@ -596,6 +789,7 @@ function paintSmc(symbol, m) {
 
 export async function initMarketPage() {
   const symbol = selectedSymbol();
+  loadSmcState();
 
   setText('mk-symbol', symbol);
   setText('mk-sub', `${DESCRIPTIONS[symbol]} · Daily`);
@@ -612,6 +806,8 @@ export async function initMarketPage() {
     paintPrediction(symbol, m, live);
     paintTrade(symbol, m);
     paintSmc(symbol, m);
+    syncSmcControls();
+    bindSmcControls();
     paintChart();
     watchChartSize();
     bindTimeframeButtons();

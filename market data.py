@@ -396,6 +396,73 @@ def daily_zone_summary(dP: dict, di: int, close: float, n: int = 3):
     return dem, sup
 
 
+def smc_export(P: dict, t: int, times, fmt, close: float, max_age: int, n_zones: int = 6) -> dict:
+    """Chart-ready SMC drawings as of bar t (kept small and sparse on purpose):
+    nearest still-valid zones, nearest unswept swing liquidity, the last structure break and
+    recent liquidity sweeps. Times go through `fmt(times[i])` so the front end can place them."""
+    atr = float(P["atr"][t]) if float(P["atr"][t]) > 0 else max(close * 0.003, 1e-9)
+    hh, ll = P["h"], P["l"]
+    r2 = lambda v: round(float(v), 2)
+    cand, sweeps = [], []
+    for k in range(max(0, t - max_age), t + 1):
+        for z in P["Z"].get(k, ()):
+            if z["inv"] is not None and z["inv"] <= t:
+                continue
+            if z["kind"] == "sweep":
+                if t - z["known"] <= max(max_age // 4, 10):
+                    sweeps.append(z)
+                continue
+            dist = max(z["bottom"] - close, close - z["top"], 0.0) / atr
+            cand.append((dist, t - z["known"], z))
+    cand.sort(key=lambda x: (x[0], x[1]))
+    picked = []
+    for _, _, z in cand:
+        if len(picked) >= n_zones:
+            break
+        dup = False
+        for q in picked:
+            if q["dir"] == z["dir"]:
+                ov = min(q["top"], z["top"]) - max(q["bottom"], z["bottom"])
+                if ov > 0.6 * min(q["top"] - q["bottom"], z["top"] - z["bottom"]):
+                    dup = True
+                    break
+        if not dup:
+            picked.append(z)
+    zones = []
+    for z in picked:
+        si = max(z["formation"] - 2, 0) if z["kind"] == "fvg" else (z["formation"] if z["kind"] == "ob" else z["known"])
+        sh_, sl_ = hh[z["known"] + 1:t + 1], ll[z["known"] + 1:t + 1]
+        touches = int(((sl_ <= z["top"]) & (sh_ >= z["bottom"])).sum()) if len(sh_) else 0
+        zones.append({"kind": z["kind"], "dir": z["dir"], "top": r2(z["top"]), "bottom": r2(z["bottom"]),
+                      "start": fmt(times[si]), "touches": min(touches, 10), "age": int(t - z["known"])})
+    highs = sorted([(px, i) for i, px in _live_swings(P, t, "sh") if px > close])[:2]
+    lows = sorted([(px, i) for i, px in _live_swings(P, t, "sl") if px < close], reverse=True)[:2]
+    levels = ([{"type": "bsl", "price": r2(px), "start": fmt(times[i])} for px, i in highs] +
+              [{"type": "ssl", "price": r2(px), "start": fmt(times[i])} for px, i in lows])
+    structure = []
+    since = int(P["since"][t]); d = int(P["bos_dir"][t])
+    if d != 0 and since < min(max_age // 2, 60):
+        bar = t - since
+        if bar > 0:
+            kind = "CHoCH" if (int(P["trend"][bar - 1]) != 0 and int(P["trend"][bar - 1]) != d) else "BOS"
+            sw_idx, sw_px, sw_conf = ((P["sh_idx"], P["sh_px"], P["sh_conf"]) if d > 0
+                                       else (P["sl_idx"], P["sl_px"], P["sl_conf"]))
+            kk = int(np.searchsorted(sw_conf, bar, side="right")) - 1
+            while kk >= 0:
+                px, si = float(sw_px[kk]), int(sw_idx[kk])
+                broke = (P["c"][bar] > px) if d > 0 else (P["c"][bar] < px)
+                clean = (hh[si + 1:bar].max() < px) if d > 0 and bar > si + 1 else (
+                        (ll[si + 1:bar].min() > px) if d < 0 and bar > si + 1 else True)
+                if broke and clean:
+                    structure.append({"type": kind, "dir": "bull" if d > 0 else "bear", "price": r2(px),
+                                      "from": fmt(times[si]), "to": fmt(times[bar])})
+                    break
+                kk -= 1
+    sw_out = [{"dir": z["dir"], "price": r2(z["top"] if z["dir"] == "bear" else z["bottom"]),
+               "time": fmt(times[z["known"]])} for z in sweeps[-3:]]
+    return {"zones": zones, "levels": levels, "structure": structure, "sweeps": sw_out}
+
+
 def daily_ctx_at(B: dict, i: int, probs: dict, side: str, dP: dict = None, di: int = None) -> dict:
     long = side == "LONG"
     nz = lambda v: 0.0 if v is None or np.isnan(v) else float(v)
@@ -3125,8 +3192,20 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
         journal = _coerce_journal(journal)
         _save_journal(journal, journal_file)
 
+    # ---- chart drawings for the front end (daily + H1) ----
+    _d_i = int(df_all.index[df_all['Date'] == row['Date'].iloc[0]][0])
+    smc = {"daily": smc_export(d_P, _d_i, df_all['Date'].to_numpy(),
+                               lambda v: str(pd.Timestamp(v).date()),
+                               float(row['Close'].iloc[0]), DAILY_ZONE_MAX_AGE)}
+    smc["h1"] = (smc_export(h1_P, len(hourly_df) - 1, hourly_df['timestamp'].to_numpy(),
+                            lambda v: pd.Timestamp(v).tz_localize('UTC').isoformat()
+                            if pd.Timestamp(v).tzinfo is None else pd.Timestamp(v).isoformat(),
+                            float(hourly_df['close'].iloc[-1]), ZONE_MAX_AGE)
+                 if HAS_HOURLY else None)
+
     return {
         'index_name': index_name,
+        'smc': smc,
         'accuracy': accuracy,
         'predicted_state': predicted_state,
         'probs': probs,
@@ -3207,6 +3286,7 @@ for csv_path, index_name in INDEX_CONFIGS:
                         "CONSOLIDATION": float(res['probs']['CONSOLIDATION']),
                     },
                 "signals": res['signals'],
+                "smc": res.get('smc'),
                     
                      "close": float(res['close']),
                      "date": str(res['latest_date']),
