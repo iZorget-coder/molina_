@@ -517,8 +517,8 @@ function paintChart() {
   }
 
       const COUNTS = {
-        '1D': { narrow: 40, wide: 100 },
-        '1H': { narrow: 30, wide: 50 },
+        '1D': { narrow: 20, wide: 40 },
+        '1H': { narrow: 20, wide: 40 },
       };
       const n = COUNTS[currentTimeframe][narrow ? 'narrow' : 'wide'];
       const candles = rows.slice(-n);
