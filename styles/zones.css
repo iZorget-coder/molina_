@@ -13,6 +13,7 @@
 .zone-tag {
   --z: var(--zone-liq);
   display: inline-block;
+  justify-content: end;
   padding: 3px 10px;
   border: 1px solid color-mix(in srgb, var(--z) 45%, transparent);
   border-radius: 999px;
