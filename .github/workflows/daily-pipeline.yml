@@ -1,11 +1,6 @@
 name: Daily Market Pipeline
 
 on:
-  schedule:
-    - cron: '17 1 * * *'   # 03:17 SAST (main run)
-    - cron: '47 2 * * *'   # 04:47 SAST (retry)
-    - cron: '17 4 * * *'   # 06:17 SAST (retry)
-    - cron: '47 5 * * *'   # 07:47 SAST (last retry)
   workflow_dispatch:
 
 # Never run two pipelines at once (e.g. a scheduled run plus a manual one)
