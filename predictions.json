@@ -1,193 +1,22 @@
 {
   "SPX": {
     "bias": "UP",
-    "confidence": 0.43904677739226194,
+    "confidence": 0.4390467773922619,
     "probabilities": {
-      "UP": 0.43904677739226194,
+      "UP": 0.4390467773922619,
       "DOWN": 0.31905210934594486,
-      "CONSOLIDATION": 0.24190111326179373
+      "CONSOLIDATION": 0.2419011132617937
     },
     "signals": [
       "Bull Breaker",
       "Bull IFVG",
       "BOS Bear"
     ],
-    "smc": {
-      "daily": {
-        "zones": [
-          {
-            "kind": "breaker",
-            "dir": "bear",
-            "top": 7444.2,
-            "bottom": 7369.55,
-            "start": "2026-11-17",
-            "touches": 3,
-            "age": 6
-          },
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 7635.81,
-            "bottom": 7444.2,
-            "start": "2026-11-04",
-            "touches": 10,
-            "age": 19
-          },
-          {
-            "kind": "ob",
-            "dir": "bear",
-            "top": 7715.57,
-            "bottom": 7635.81,
-            "start": "2026-11-04",
-            "touches": 4,
-            "age": 20
-          },
-          {
-            "kind": "ob",
-            "dir": "bear",
-            "top": 7732.21,
-            "bottom": 7690.94,
-            "start": "2026-10-29",
-            "touches": 1,
-            "age": 24
-          },
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 7786.11,
-            "bottom": 7754.15,
-            "start": "2026-10-13",
-            "touches": 3,
-            "age": 35
-          },
-          {
-            "kind": "ob",
-            "dir": "bear",
-            "top": 7814.15,
-            "bottom": 7786.11,
-            "start": "2026-10-13",
-            "touches": 0,
-            "age": 36
-          }
-        ],
-        "levels": [
-          {
-            "type": "bsl",
-            "price": 7652.76,
-            "start": "2026-11-12"
-          },
-          {
-            "type": "bsl",
-            "price": 7715.57,
-            "start": "2026-11-04"
-          }
-        ],
-        "structure": [
-          {
-            "type": "BOS",
-            "dir": "bear",
-            "price": 7350.35,
-            "from": "2026-11-05",
-            "to": "2026-11-17"
-          }
-        ],
-        "sweeps": []
-      },
-      "h1": {
-        "zones": [
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 7022.0,
-            "bottom": 6987.25,
-            "start": "2026-11-20T18:00:00+00:00",
-            "touches": 0,
-            "age": 1
-          },
-          {
-            "kind": "ob",
-            "dir": "bear",
-            "top": 7071.75,
-            "bottom": 7022.0,
-            "start": "2026-11-20T18:00:00+00:00",
-            "touches": 0,
-            "age": 2
-          },
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 7096.5,
-            "bottom": 7074.75,
-            "start": "2026-11-20T15:00:00+00:00",
-            "touches": 0,
-            "age": 4
-          },
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 7138.25,
-            "bottom": 7121.5,
-            "start": "2026-11-20T14:00:00+00:00",
-            "touches": 0,
-            "age": 5
-          },
-          {
-            "kind": "ob",
-            "dir": "bear",
-            "top": 7206.0,
-            "bottom": 7138.25,
-            "start": "2026-11-20T14:00:00+00:00",
-            "touches": 0,
-            "age": 6
-          },
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 7213.75,
-            "bottom": 7201.0,
-            "start": "2026-11-19T19:00:00+00:00",
-            "touches": 2,
-            "age": 23
-          }
-        ],
-        "levels": [
-          {
-            "type": "bsl",
-            "price": 7216.75,
-            "start": "2026-11-20T15:00:00+00:00"
-          },
-          {
-            "type": "bsl",
-            "price": 7440.5,
-            "start": "2026-11-19T11:00:00+00:00"
-          }
-        ],
-        "structure": [
-          {
-            "type": "CHoCH",
-            "dir": "bull",
-            "price": 7183.25,
-            "from": "2026-11-20T08:00:00+00:00",
-            "to": "2026-11-20T14:00:00+00:00"
-          }
-        ],
-        "sweeps": []
-      }
-    },
     "close": 6910.39013671875,
     "date": "2026-11-20",
     "trade": {
-      "action": "LONG",
-      "entry": 6966.75,
-      "stop_loss": 6878.34,
-      "take_profit": 7216.75,
-      "risk": 88.41,
-      "reward": 250.0,
-      "risk_reward": 2.83,
-      "conviction": "Medium",
-      "entry_type": "market at close (fallback; no H1 zone in bias direction)",
-      "stop_source": "beyond recent H1 swing low (clamped 0.75-2.0 ATR)",
-      "target_source": "H1 swing high #1"
+      "action": "NO TRADE",
+      "reason": "No valid H1 zone near price in the daily-bias direction"
     }
   },
   "NDX": {
@@ -196,194 +25,25 @@
     "probabilities": {
       "UP": 0.4107150922008451,
       "DOWN": 0.34399275422169917,
-      "CONSOLIDATION": 0.24529215357745587
+      "CONSOLIDATION": 0.24529215357745585
     },
     "signals": [
       "Bull Breaker",
       "Bull IFVG",
       "BOS Bear"
     ],
-    "smc": {
-      "daily": {
-        "zones": [
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 26848.92,
-            "bottom": 26429.09,
-            "start": "2026-11-18",
-            "touches": 0,
-            "age": 0
-          },
-          {
-            "kind": "breaker",
-            "dir": "bear",
-            "top": 27316.09,
-            "bottom": 26887.69,
-            "start": "2026-11-19",
-            "touches": 0,
-            "age": 1
-          },
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 27609.71,
-            "bottom": 27258.84,
-            "start": "2026-11-13",
-            "touches": 1,
-            "age": 3
-          },
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 27940.58,
-            "bottom": 27621.64,
-            "start": "2026-11-12",
-            "touches": 1,
-            "age": 4
-          },
-          {
-            "kind": "ifvg",
-            "dir": "bear",
-            "top": 28102.75,
-            "bottom": 28025.77,
-            "start": "2026-11-13",
-            "touches": 0,
-            "age": 5
-          },
-          {
-            "kind": "ob",
-            "dir": "bear",
-            "top": 28829.66,
-            "bottom": 28276.22,
-            "start": "2026-11-04",
-            "touches": 3,
-            "age": 11
-          }
-        ],
-        "levels": [
-          {
-            "type": "bsl",
-            "price": 28593.52,
-            "start": "2026-11-11"
-          },
-          {
-            "type": "bsl",
-            "price": 28829.66,
-            "start": "2026-11-04"
-          }
-        ],
-        "structure": [],
-        "sweeps": []
-      },
-      "h1": {
-        "zones": [
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 25493.25,
-            "bottom": 25367.0,
-            "start": "2026-11-20T18:00:00+00:00",
-            "touches": 0,
-            "age": 1
-          },
-          {
-            "kind": "ob",
-            "dir": "bear",
-            "top": 25762.5,
-            "bottom": 25493.25,
-            "start": "2026-11-20T18:00:00+00:00",
-            "touches": 0,
-            "age": 2
-          },
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 25805.5,
-            "bottom": 25721.5,
-            "start": "2026-11-20T15:00:00+00:00",
-            "touches": 1,
-            "age": 4
-          },
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 26116.75,
-            "bottom": 25980.0,
-            "start": "2026-11-20T14:00:00+00:00",
-            "touches": 0,
-            "age": 5
-          },
-          {
-            "kind": "ob",
-            "dir": "bear",
-            "top": 26451.25,
-            "bottom": 26116.75,
-            "start": "2026-11-20T14:00:00+00:00",
-            "touches": 0,
-            "age": 6
-          },
-          {
-            "kind": "ob",
-            "dir": "bear",
-            "top": 26524.75,
-            "bottom": 26366.0,
-            "start": "2026-11-20T03:00:00+00:00",
-            "touches": 6,
-            "age": 17
-          }
-        ],
-        "levels": [
-          {
-            "type": "bsl",
-            "price": 26504.25,
-            "start": "2026-11-20T15:00:00+00:00"
-          },
-          {
-            "type": "bsl",
-            "price": 27838.0,
-            "start": "2026-11-19T14:00:00+00:00"
-          }
-        ],
-        "structure": [
-          {
-            "type": "CHoCH",
-            "dir": "bear",
-            "price": 27303.0,
-            "from": "2026-11-19T03:00:00+00:00",
-            "to": "2026-11-19T15:00:00+00:00"
-          }
-        ],
-        "sweeps": [
-          {
-            "dir": "bear",
-            "price": 26451.25,
-            "time": "2026-11-20T14:00:00+00:00"
-          }
-        ]
-      }
-    },
     "close": 25028.98,
     "date": "2026-11-20",
     "trade": {
-      "action": "LONG",
-      "entry": 25291.0,
-      "stop_loss": 24876.42,
-      "take_profit": 26504.25,
-      "risk": 414.58,
-      "reward": 1213.25,
-      "risk_reward": 2.93,
-      "conviction": "Medium",
-      "entry_type": "market at close (fallback; no H1 zone in bias direction)",
-      "stop_source": "beyond recent H1 swing low (clamped 0.75-2.0 ATR)",
-      "target_source": "H1 swing high #1"
+      "action": "NO TRADE",
+      "reason": "No valid H1 zone near price in the daily-bias direction"
     }
   },
   "DJI": {
     "bias": "UP",
-    "confidence": 0.4211308376363817,
+    "confidence": 0.42113083763638165,
     "probabilities": {
-      "UP": 0.4211308376363817,
+      "UP": 0.42113083763638165,
       "DOWN": 0.37168571043389564,
       "CONSOLIDATION": 0.2071834519297223
     },
@@ -392,156 +52,11 @@
       "Bull IFVG",
       "BOS Bear"
     ],
-    "smc": {
-      "daily": {
-        "zones": [
-          {
-            "kind": "ifvg",
-            "dir": "bear",
-            "top": 51718.6,
-            "bottom": 51245.28,
-            "start": "2026-11-17",
-            "touches": 1,
-            "age": 6
-          },
-          {
-            "kind": "ob",
-            "dir": "bear",
-            "top": 53492.4,
-            "bottom": 52410.23,
-            "start": "2026-11-04",
-            "touches": 8,
-            "age": 20
-          },
-          {
-            "kind": "ifvg",
-            "dir": "bear",
-            "top": 54266.12,
-            "bottom": 53230.08,
-            "start": "2026-08-20",
-            "touches": 10,
-            "age": 74
-          },
-          {
-            "kind": "ob",
-            "dir": "bear",
-            "top": 54744.33,
-            "bottom": 54266.12,
-            "start": "2026-08-05",
-            "touches": 0,
-            "age": 84
-          }
-        ],
-        "levels": [
-          {
-            "type": "bsl",
-            "price": 52751.22,
-            "start": "2026-11-12"
-          },
-          {
-            "type": "bsl",
-            "price": 53710.61,
-            "start": "2026-11-05"
-          }
-        ],
-        "structure": [
-          {
-            "type": "BOS",
-            "dir": "bear",
-            "price": 50992.61,
-            "from": "2026-11-06",
-            "to": "2026-11-17"
-          }
-        ],
-        "sweeps": []
-      },
-      "h1": {
-        "zones": [
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 48718.0,
-            "bottom": 48585.0,
-            "start": "2026-11-20T18:00:00+00:00",
-            "touches": 0,
-            "age": 1
-          },
-          {
-            "kind": "ob",
-            "dir": "bear",
-            "top": 49028.0,
-            "bottom": 48718.0,
-            "start": "2026-11-20T18:00:00+00:00",
-            "touches": 0,
-            "age": 2
-          },
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 49165.0,
-            "bottom": 49036.0,
-            "start": "2026-11-20T15:00:00+00:00",
-            "touches": 0,
-            "age": 4
-          },
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 49718.0,
-            "bottom": 49661.0,
-            "start": "2026-11-19T15:00:00+00:00",
-            "touches": 0,
-            "age": 27
-          },
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 50218.0,
-            "bottom": 49915.0,
-            "start": "2026-11-19T14:00:00+00:00",
-            "touches": 0,
-            "age": 28
-          },
-          {
-            "kind": "breaker",
-            "dir": "bear",
-            "top": 50292.0,
-            "bottom": 50226.0,
-            "start": "2026-11-19T15:00:00+00:00",
-            "touches": 0,
-            "age": 29
-          }
-        ],
-        "levels": [
-          {
-            "type": "bsl",
-            "price": 49656.0,
-            "start": "2026-11-20T15:00:00+00:00"
-          },
-          {
-            "type": "bsl",
-            "price": 50656.0,
-            "start": "2026-11-19T11:00:00+00:00"
-          }
-        ],
-        "structure": [],
-        "sweeps": []
-      }
-    },
     "close": 48147.328125,
     "date": "2026-11-20",
     "trade": {
-      "action": "LONG",
-      "entry": 48391.0,
-      "stop_loss": 47942.88,
-      "take_profit": 49656.0,
-      "risk": 448.12,
-      "reward": 1265.0,
-      "risk_reward": 2.82,
-      "conviction": "Medium",
-      "entry_type": "market at close (fallback; no H1 zone in bias direction)",
-      "stop_source": "beyond recent H1 swing low (clamped 0.75-2.0 ATR)",
-      "target_source": "H1 swing high #1"
+      "action": "NO TRADE",
+      "reason": "No valid H1 zone near price in the daily-bias direction"
     }
   },
   "XAUUSD": {
@@ -549,7 +64,7 @@
     "confidence": 0.5501426373712229,
     "probabilities": {
       "UP": 0.5501426373712229,
-      "DOWN": 0.2466322190147331,
+      "DOWN": 0.24663221901473306,
       "CONSOLIDATION": 0.20322514361404373
     },
     "signals": [
@@ -557,185 +72,11 @@
       "Bull IFVG",
       "BOS Bear"
     ],
-    "smc": {
-      "daily": {
-        "zones": [
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 3717.3,
-            "bottom": 3637.72,
-            "start": "2026-11-18",
-            "touches": 0,
-            "age": 0
-          },
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 3836.86,
-            "bottom": 3760.62,
-            "start": "2026-11-17",
-            "touches": 0,
-            "age": 1
-          },
-          {
-            "kind": "breaker",
-            "dir": "bear",
-            "top": 4024.68,
-            "bottom": 3870.21,
-            "start": "2026-11-16",
-            "touches": 1,
-            "age": 4
-          },
-          {
-            "kind": "breaker",
-            "dir": "bear",
-            "top": 4107.69,
-            "bottom": 4027.12,
-            "start": "2026-11-11",
-            "touches": 0,
-            "age": 7
-          },
-          {
-            "kind": "breaker",
-            "dir": "bear",
-            "top": 4170.16,
-            "bottom": 4073.63,
-            "start": "2026-10-22",
-            "touches": 5,
-            "age": 21
-          },
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 4255.71,
-            "bottom": 4185.16,
-            "start": "2026-09-25",
-            "touches": 8,
-            "age": 38
-          }
-        ],
-        "levels": [
-          {
-            "type": "bsl",
-            "price": 4148.65,
-            "start": "2026-11-09"
-          },
-          {
-            "type": "bsl",
-            "price": 4217.27,
-            "start": "2026-10-12"
-          }
-        ],
-        "structure": [],
-        "sweeps": []
-      },
-      "h1": {
-        "zones": [
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 3563.09,
-            "bottom": 3558.14,
-            "start": "2026-11-20T14:00:00+00:00",
-            "touches": 0,
-            "age": 5
-          },
-          {
-            "kind": "ob",
-            "dir": "bear",
-            "top": 3581.54,
-            "bottom": 3563.09,
-            "start": "2026-11-20T14:00:00+00:00",
-            "touches": 0,
-            "age": 6
-          },
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 3658.95,
-            "bottom": 3636.93,
-            "start": "2026-11-19T20:00:00+00:00",
-            "touches": 0,
-            "age": 22
-          },
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 3665.76,
-            "bottom": 3662.32,
-            "start": "2026-11-19T19:00:00+00:00",
-            "touches": 0,
-            "age": 23
-          },
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 3675.76,
-            "bottom": 3672.93,
-            "start": "2026-11-19T18:00:00+00:00",
-            "touches": 0,
-            "age": 24
-          },
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 3703.22,
-            "bottom": 3692.24,
-            "start": "2026-11-19T14:00:00+00:00",
-            "touches": 1,
-            "age": 28
-          }
-        ],
-        "levels": [
-          {
-            "type": "bsl",
-            "price": 3586.14,
-            "start": "2026-11-20T15:00:00+00:00"
-          },
-          {
-            "type": "bsl",
-            "price": 3595.29,
-            "start": "2026-11-20T10:00:00+00:00"
-          },
-          {
-            "type": "ssl",
-            "price": 3502.99,
-            "start": "2026-11-20T18:00:00+00:00"
-          }
-        ],
-        "structure": [
-          {
-            "type": "BOS",
-            "dir": "bear",
-            "price": 3693.53,
-            "from": "2026-11-19T03:00:00+00:00",
-            "to": "2026-11-19T15:00:00+00:00"
-          }
-        ],
-        "sweeps": [
-          {
-            "dir": "bull",
-            "price": 3502.99,
-            "time": "2026-11-20T18:00:00+00:00"
-          }
-        ]
-      }
-    },
     "close": 3527.34,
     "date": "2026-11-20",
     "trade": {
-      "action": "LONG",
-      "entry": 3514.56,
-      "stop_loss": 3493.47,
-      "take_profit": 3584.79,
-      "risk": 21.09,
-      "reward": 70.23,
-      "risk_reward": 3.33,
-      "conviction": "High",
-      "entry_type": "H1 SWEEP edge limit (heuristic; valid 8 H1 bars)",
-      "stop_source": "beyond zone",
-      "target_source": "H1 swing high #1"
+      "action": "NO TRADE",
+      "reason": "No valid H1 zone near price in the daily-bias direction"
     }
   }
 }
