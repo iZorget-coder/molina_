@@ -314,17 +314,15 @@ function paintChart() {
   const titleEl = $('chart-title');
   if (!svg) return;
 
-  // The axis labels are drawn inside the SVG, so let it fill its frame.
   const wrap = svg.parentElement;
   if (wrap) wrap.style.paddingRight = '0';
   svg.style.width = '100%';
   svg.style.height = '100%';
 
-  // Real pixel size -> viewBox 1:1 -> no horizontal squashing on phones.
   const rect = svg.getBoundingClientRect();
   const W = Math.round(rect.width);
   const H = Math.round(rect.height);
-  if (W < 50 || H < 50) return; // not laid out yet
+  if (W < 50 || H < 50) return;
   lastChartSize = { W, H };
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
@@ -342,7 +340,6 @@ function paintChart() {
     );
   }
 
-  // Fewer, thicker candles on phones
   const candles = narrow ? rows.slice(-60) : rows;
 
   if (titleEl) {
@@ -376,8 +373,6 @@ function paintChart() {
     { key: 'SL',    price: t?.stopLoss,   color: '#ef4444' },
   ].filter((l) => Number.isFinite(l.price) && l.price > 0);
 
-  // A level close to the candles widens the axis so it is drawn next to
-  // them. A level far away (a bad value) is shown as an edge marker only.
   levels.forEach((l) => {
     l.near = l.price >= minP - reach && l.price <= maxP + reach;
   });
@@ -404,9 +399,18 @@ function paintChart() {
     v.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 
   const widest = Math.max(...ticks.map((v) => fmtTick(v).length));
+
+  // ----- Reserve a right-side gutter for the level tags -----
+  // Compute the widest tag ("Entry 25,291.00") so the gutter fits it comfortably.
+  const levelTexts = levels.map((l) => `${l.key} ${fmt(l.price)}`);
+  const widestLevel = levelTexts.reduce((max, s) => Math.max(max, s.length), 0);
+  const levelTagW = widestLevel ? Math.ceil(widestLevel * CHAR_W) + 12 : 0;
+  // Extra breathing room after the tag so it doesn't kiss the SVG edge.
+  const rightGutter = widestLevel ? levelTagW + 14 : (narrow ? 8 : 16);
+
   const PAD = {
     left: Math.ceil(widest * CHAR_W) + 14,
-    right: narrow ? 8 : 16,
+    right: rightGutter,
     top: 14,
     bottom: 28,
   };
@@ -429,7 +433,7 @@ function paintChart() {
     html += `<text x="${PAD.left - 8}" y="${yPix + 4}" text-anchor="end" fill="#8b95ad" font-size="${CHART_FONT_SIZE}" font-family="${CHART_FONT}">${fmtTick(price)}</text>`;
   });
 
-  /* ----- Candles ----- */
+  /* ----- Candles (now end before the right gutter) ----- */
   candles.forEach((c, i) => {
     const x = PAD.left + i * barW + barW / 2;
     const up = c.close >= c.open;
@@ -449,12 +453,12 @@ function paintChart() {
   const inside = plotted.filter((l) => l.y >= PAD.top - 1 && l.y <= plotBottom + 1);
   const outside = plotted.filter((l) => !inside.includes(l));
 
-  // dashed lines at the exact price
+  // Dashed lines stop at the right edge of the plot area (NOT over the gutter).
   inside.forEach((l) => {
     html += `<line x1="${PAD.left}" y1="${l.y}" x2="${plotRight}" y2="${l.y}" stroke="${l.color}" stroke-width="1" stroke-dasharray="6 4"/>`;
   });
 
-  // price tags at the right edge, nudged apart if two levels are close
+  // De-overlap the tag y-positions.
   inside.sort((a, b) => a.y - b.y);
   let prev = -Infinity;
   inside.forEach((l) => {
@@ -468,20 +472,24 @@ function paintChart() {
     }
   }
 
+  // Tags live in the gutter, right-aligned to W - 6 so there is true
+  // right-side breathing room and they never cover the last candle.
+  const TAG_RIGHT = W - 6;
   inside.forEach((l) => {
     const text = `${l.key} ${fmt(l.price)}`;
     const w = Math.ceil(text.length * CHAR_W) + 10;
-    html += `<rect x="${plotRight - w}" y="${l.ly - LABEL_H / 2}" width="${w}" height="${LABEL_H}" rx="3" fill="#111a30" fill-opacity="0.92" stroke="${l.color}" stroke-width="1"/>`;
-    html += `<text x="${plotRight - w / 2}" y="${l.ly + 4}" text-anchor="middle" fill="${l.color}" font-size="${CHART_FONT_SIZE}" font-weight="600" font-family="${CHART_FONT}">${text}</text>`;
+    const tx = TAG_RIGHT - w; // left edge of the tag box
+    html += `<rect x="${tx}" y="${l.ly - LABEL_H / 2}" width="${w}" height="${LABEL_H}" rx="3" fill="#111a30" fill-opacity="0.95" stroke="${l.color}" stroke-width="1"/>`;
+    html += `<text x="${tx + w / 2}" y="${l.ly + 4}" text-anchor="middle" fill="${l.color}" font-size="${CHART_FONT_SIZE}" font-weight="600" font-family="${CHART_FONT}">${text}</text>`;
   });
 
-  // levels far outside the candles: edge markers only (never mis-plotted)
+  // Far-away levels: compact edge markers, also right-aligned in the gutter.
   let above = 0;
   let below = 0;
   outside.forEach((l) => {
     const isAbove = l.y < PAD.top;
     const edgeY = isAbove ? PAD.top + 10 + above++ * 14 : plotBottom - 6 - below++ * 14;
-    html += `<text x="${plotRight - 4}" y="${edgeY}" text-anchor="end" fill="${l.color}" font-size="10" font-weight="600" font-family="${CHART_FONT}">${isAbove ? '▲' : '▼'} ${l.key} ${fmt(l.price)}</text>`;
+    html += `<text x="${TAG_RIGHT}" y="${edgeY}" text-anchor="end" fill="${l.color}" font-size="10" font-weight="600" font-family="${CHART_FONT}">${isAbove ? '▲' : '▼'} ${l.key} ${fmt(l.price)}</text>`;
   });
 
   /* ----- Date axis ----- */
