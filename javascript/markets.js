@@ -1,4 +1,5 @@
 import { MARKETS, fetchLatestPredictions, formatLong } from './predictions.js';
+import { zoneKey, zoneRgb } from './zones.js';
 
 const STORAGE_KEY = 'molina:market';
 const DEFAULT_SYMBOL = 'XAUUSD';
@@ -14,6 +15,7 @@ const DESCRIPTIONS = {
 const SIGNAL_META = {
   'BOS Bull':       { tone: 'up',      arrow: '▲', description: 'Bullish break of structure' },
   'BOS Bear':       { tone: 'down',    arrow: '▼', description: 'Bearish break of structure' },
+  'CHoCH':          { tone: 'neutral', arrow: '◆', description: 'Change of character — structure flipped' },
   'Bull FVG':       { tone: 'up',      arrow: '▲', description: 'Bullish fair value gap' },
   'Bear FVG':       { tone: 'down',    arrow: '▼', description: 'Bearish fair value gap' },
   'Bull IFVG':      { tone: 'up',      arrow: '▲', description: 'Bullish inverse fair value gap' },
@@ -22,6 +24,8 @@ const SIGNAL_META = {
   'Bear Breaker':   { tone: 'down',    arrow: '▼', description: 'Bearish breaker block' },
   'Bull OB':        { tone: 'up',      arrow: '▲', description: 'Bullish order block' },
   'Bear OB':        { tone: 'down',    arrow: '▼', description: 'Bearish order block' },
+  'Sweep High':     { tone: 'down',    arrow: '▼', description: 'Buy-side liquidity swept above a recent high' },
+  'Sweep Low':      { tone: 'up',      arrow: '▲', description: 'Sell-side liquidity swept below a recent low' },
   'Liquidity Sweep':{ tone: 'neutral', arrow: '◆', description: 'Liquidity taken at recent extreme' },
 };
 
@@ -317,12 +321,18 @@ function niceTicks(lo, hi, target) {
    sweeps. They are drawn faintly *behind* the candles; hover any
    of them for the details. Everything is toggled from the chart
    header and remembered in localStorage.
+
+   Colours: every zone type has its own colour (see zones.js):
+   FVG orange, OB blue, IFVG purple, breaker red, sweep pink,
+   BOS teal, CHoCH lime, liquidity slate. Direction is shown by
+   the ▲/▼ in the label and the border: solid = bullish,
+   dashed = bearish.
    ========================================================== */
 
 const SMC_STORE = 'molina:smc';
 const smcState = { on: false, layers: { zones: true, levels: true, structure: true } };
 
-const RGB = { bull: '34,197,94', bear: '239,68,68', mute: '169,178,199', amber: '245,158,11' };
+const RGB = { mute: zoneRgb('liq') };
 const ZONE_LABEL = { fvg: 'FVG', ob: 'OB', ifvg: 'IFVG', breaker: 'BRK' };
 const ZONE_NAME = { fvg: 'fair value gap', ob: 'order block', ifvg: 'inverse FVG', breaker: 'breaker block' };
 
@@ -372,20 +382,20 @@ function buildSmcOverlay({ set, candles, isH1, PAD, plotW, plotH, plotRight, bar
       if (!inView(z.bottom, z.top)) return;
       const i = idxAt(z.start);
       if (i === null) return;
-      const rgb = z.dir === 'bull' ? RGB.bull : RGB.bear;
-      const dashed = z.kind === 'ifvg' || z.kind === 'breaker';
+      const bull = z.dir === 'bull';
+      const rgb = zoneRgb(zoneKey(z.kind));
       const yT = y(Math.min(z.top, hi));
       const yB = y(Math.max(z.bottom, lo));
       const x0 = xl(i);
       const h = Math.max(yB - yT, 1.5);
-      const tip = `${z.dir === 'bull' ? 'Bullish' : 'Bearish'} ${ZONE_NAME[z.kind] || z.kind} · ` +
+      const tip = `${bull ? 'Bullish' : 'Bearish'} ${ZONE_NAME[z.kind] || z.kind} · ` +
         `${fmt(z.bottom)} – ${fmt(z.top)} · touched ${z.touches}× · ${z.age}${unit} old`;
       out.back +=
         `<g><title>${tip}</title>` +
-        `<rect x="${x0}" y="${yT}" width="${Math.max(plotRight - x0, 1)}" height="${h}" fill="rgba(${rgb},0.07)"` +
-        (dashed ? ` stroke="rgba(${rgb},0.35)" stroke-dasharray="3 3"` : '') + '/>' +
-        (z.kind === 'ob' ? `<line x1="${x0}" y1="${yT}" x2="${x0}" y2="${yT + h}" stroke="rgba(${rgb},0.45)" stroke-width="2"/>` : '') +
-        `<text x="${x0 + 4}" y="${h >= 12 ? yT + 10 : yT - 2}" font-size="9" font-family="${CHART_FONT}" fill="rgba(${rgb},0.75)">${ZONE_LABEL[z.kind] || z.kind}</text>` +
+        `<rect x="${x0}" y="${yT}" width="${Math.max(plotRight - x0, 1)}" height="${h}" fill="rgba(${rgb},0.10)" ` +
+        `stroke="rgba(${rgb},0.45)" stroke-width="1"${bull ? '' : ' stroke-dasharray="3 3"'}/>` +
+        (z.kind === 'ob' ? `<line x1="${x0}" y1="${yT}" x2="${x0}" y2="${yT + h}" stroke="rgba(${rgb},0.75)" stroke-width="2"/>` : '') +
+        `<text x="${x0 + 4}" y="${h >= 12 ? yT + 10 : yT - 2}" font-size="9" font-family="${CHART_FONT}" fill="rgba(${rgb},0.9)">${bull ? '▲' : '▼'} ${ZONE_LABEL[z.kind] || z.kind}</text>` +
         '</g>';
       out.zones += 1;
     });
@@ -400,11 +410,12 @@ function buildSmcOverlay({ set, candles, isH1, PAD, plotW, plotH, plotRight, bar
       const bsl = l.type === 'bsl';
       out.back +=
         `<g><title>${bsl ? 'Buy-side liquidity (unswept high)' : 'Sell-side liquidity (unswept low)'} · ${fmt(l.price)}</title>` +
-        `<line x1="${xc(i)}" y1="${yy}" x2="${plotRight}" y2="${yy}" stroke="rgba(${RGB.mute},0.4)" stroke-dasharray="1 4" stroke-linecap="round"/>` +
-        `<text x="${plotRight - 4}" y="${yy - 3}" text-anchor="end" font-size="9" font-family="${CHART_FONT}" fill="rgba(${RGB.mute},0.6)">${bsl ? 'BSL' : 'SSL'}</text></g>`;
+        `<line x1="${xc(i)}" y1="${yy}" x2="${plotRight}" y2="${yy}" stroke="rgba(${RGB.mute},0.5)" stroke-dasharray="1 4" stroke-linecap="round"/>` +
+        `<text x="${plotRight - 4}" y="${yy - 3}" text-anchor="end" font-size="9" font-family="${CHART_FONT}" fill="rgba(${RGB.mute},0.8)">${bsl ? 'BSL' : 'SSL'}</text></g>`;
       out.levels += 1;
     });
 
+    const sweepRgb = zoneRgb('sweep');
     (set.sweeps || []).forEach((sw) => {
       if (sw.price < lo || sw.price > hi) return;
       const i = idxAt(sw.time);
@@ -413,7 +424,7 @@ function buildSmcOverlay({ set, candles, isH1, PAD, plotW, plotH, plotRight, bar
       const cy = y(sw.price) + (sw.dir === 'bear' ? -6 : 6);
       out.front +=
         `<g><title>Liquidity sweep (${sw.dir === 'bear' ? 'highs' : 'lows'} taken) · ${fmt(sw.price)}</title>` +
-        `<path d="M${cx} ${cy - 3} L${cx + 3} ${cy} L${cx} ${cy + 3} L${cx - 3} ${cy} Z" fill="rgba(${RGB.amber},0.6)"/></g>`;
+        `<path d="M${cx} ${cy - 3.5} L${cx + 3.5} ${cy} L${cx} ${cy + 3.5} L${cx - 3.5} ${cy} Z" fill="rgba(${sweepRgb},0.85)"/></g>`;
       out.levels += 1;
     });
   }
@@ -424,12 +435,13 @@ function buildSmcOverlay({ set, candles, isH1, PAD, plotW, plotH, plotRight, bar
       const i0 = idxAt(st.from);
       const i1 = idxAt(st.to);
       if (i0 === null || i1 === null || i1 <= i0) return;
-      const rgb = st.dir === 'bull' ? RGB.bull : RGB.bear;
+      const bull = st.dir === 'bull';
+      const rgb = zoneRgb(zoneKey(st.type));
       const yy = y(st.price);
       out.back +=
-        `<g><title>${st.dir === 'bull' ? 'Bullish' : 'Bearish'} ${st.type} · broke ${fmt(st.price)}</title>` +
-        `<line x1="${xc(i0)}" y1="${yy}" x2="${xc(i1)}" y2="${yy}" stroke="rgba(${rgb},0.5)" stroke-dasharray="4 3"/>` +
-        `<text x="${(xc(i0) + xc(i1)) / 2}" y="${yy - 3}" text-anchor="middle" font-size="9" font-family="${CHART_FONT}" fill="rgba(${rgb},0.7)">${st.type}</text></g>`;
+        `<g><title>${bull ? 'Bullish' : 'Bearish'} ${st.type} · broke ${fmt(st.price)}</title>` +
+        `<line x1="${xc(i0)}" y1="${yy}" x2="${xc(i1)}" y2="${yy}" stroke="rgba(${rgb},0.7)" stroke-dasharray="4 3"/>` +
+        `<text x="${(xc(i0) + xc(i1)) / 2}" y="${yy - 3}" text-anchor="middle" font-size="9" font-family="${CHART_FONT}" fill="rgba(${rgb},0.9)">${bull ? '▲' : '▼'} ${st.type}</text></g>`;
       out.levels += 1;
     });
   }
@@ -764,7 +776,7 @@ function paintSmc(symbol, m) {
     const meta = SIGNAL_META[raw] || { tone: 'neutral', arrow: '◆', description: raw };
     const item = {
       label: raw,
-      tone: meta.tone,
+      zone: zoneKey(raw),
       arrow: meta.arrow,
       description: meta.description,
     };
@@ -775,19 +787,16 @@ function paintSmc(symbol, m) {
     }
   });
 
-  grid.innerHTML = gridItems.map(item => `
-    <div class="signal">
-      <span class="tag tag--${item.tone} tag--sm">${item.arrow} ${item.label}</span>
+  // each signal tag takes its zone colour (zones.css); ▲/▼ still shows direction
+  const signalHtml = (item, extra = '') => `
+    <div class="signal${extra}">
+      <span class="zone-tag" data-zone="${item.zone}">${item.arrow} ${item.label}</span>
       <p>${item.description}</p>
     </div>
-  `).join('');
+  `;
 
-  wide.innerHTML = wideItems.map(item => `
-    <div class="signal signal--wide">
-      <span class="tag tag--${item.tone} tag--sm">${item.arrow} ${item.label}</span>
-      <p>${item.description}</p>
-    </div>
-  `).join('');
+  grid.innerHTML = gridItems.map((item) => signalHtml(item)).join('');
+  wide.innerHTML = wideItems.map((item) => signalHtml(item, ' signal--wide')).join('');
 }
 
 /* ---------- Page entry point ---------- */
