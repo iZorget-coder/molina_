@@ -572,6 +572,7 @@
   }
 }
 
+
 /* paste at the end of market.css */
 .setup-status {
   margin: 0 16px 10px;
@@ -586,3 +587,12 @@
 .setup-status[data-tone="up"]   { background: rgba(34, 197, 94, 0.10);  color: #22c55e; border-color: rgba(34, 197, 94, 0.35); }
 .setup-status[data-tone="down"] { background: rgba(239, 68, 68, 0.10);  color: #ef4444; border-color: rgba(239, 68, 68, 0.35); }
 .setup-status[hidden] { display: none; }
+
+/* live feed time: sits in the SMC row so it shows on phones too */
+.live-note {
+  margin-left: auto;
+  font-size: 11px;
+  color: #22c55e;
+  white-space: nowrap;
+}
+.live-note[hidden] { display: none; }

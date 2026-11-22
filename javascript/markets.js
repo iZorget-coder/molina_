@@ -647,6 +647,7 @@ function paintChart() {
   if (!candles.length) {
     svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" fill="#8b95ad" font-size="14" font-family="${CHART_FONT}">No ${isH1 ? 'hourly' : 'daily'} data</text>`;
     if (lastDateEl) lastDateEl.textContent = '';
+    if ($('live-note')) $('live-note').hidden = true;
     return;
   }
 
@@ -654,8 +655,17 @@ function paintChart() {
     const last = candles[candles.length - 1];
     lastDateEl.textContent =
       `Last: ${formatCandleLabel(last, currentTimeframe)}` +
-      (isH1 && liveData ? ` · live${liveData.updatedAt ? ` ${String(liveData.updatedAt.getUTCHours()).padStart(2, '0')}:${String(liveData.updatedAt.getUTCMinutes()).padStart(2, '0')} UTC` : ''}` : '') +
       (dropped ? ` · ${dropped} bad candle${dropped === 1 ? '' : 's'} hidden` : '');
+  }
+
+  // live feed time: own element in the SMC row (the header line is hidden on some phones)
+  const liveEl = $('live-note');
+  if (liveEl) {
+    const u = liveData?.updatedAt;
+    liveEl.hidden = !(isH1 && liveData);
+    liveEl.textContent = u
+      ? `● live ${String(u.getUTCHours()).padStart(2, '0')}:${String(u.getUTCMinutes()).padStart(2, '0')} UTC`
+      : '● live';
   }
 
   /* ----- Price range ----- */
