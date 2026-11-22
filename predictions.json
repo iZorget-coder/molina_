@@ -5,7 +5,7 @@
     "probabilities": {
       "UP": 0.4390467773922619,
       "DOWN": 0.31905210934594486,
-      "CONSOLIDATION": 0.2419011132617937
+      "CONSOLIDATION": 0.24190111326179367
     },
     "signals": [
       "Bull Breaker",
@@ -59,11 +59,11 @@
   },
   "DJI": {
     "bias": "UP",
-    "confidence": 0.4211308376363817,
+    "confidence": 0.42113083763638165,
     "probabilities": {
-      "UP": 0.4211308376363817,
+      "UP": 0.42113083763638165,
       "DOWN": 0.37168571043389564,
-      "CONSOLIDATION": 0.2071834519297223
+      "CONSOLIDATION": 0.20718345192972226
     },
     "signals": [
       "Bull Breaker",
@@ -92,7 +92,7 @@
     "probabilities": {
       "UP": 0.5501426373712229,
       "DOWN": 0.2466322190147331,
-      "CONSOLIDATION": 0.20322514361404373
+      "CONSOLIDATION": 0.20322514361404376
     },
     "signals": [
       "Bull Breaker",
