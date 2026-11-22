@@ -304,11 +304,12 @@
   }
 
   /* ---------- SMC overlay toggle (chart header) ---------- */
-  .card__head-right {
+  .smc-bar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 14px;
-    min-width: 0;
+    gap: 8px 10px;
+    margin: -2px 0 10px;
   }
 
   .smc-toggle {
@@ -324,6 +325,7 @@
     font: inherit;
     font-size: 13px;
     font-weight: 600;
+    flex-shrink: 0;
     cursor: pointer;
     transition: background 0.15s, color 0.15s, border-color 0.15s;
   }
@@ -368,7 +370,6 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
-    margin: -4px 0 10px;
   }
 
   .chip-sm {
@@ -403,11 +404,6 @@
   .chip-sm:focus-visible {
     outline: 2px solid var(--accent-soft);
     outline-offset: 2px;
-  }
-
-  @media (max-width: 520px) {
-    .chart-card .card__head { flex-wrap: wrap; }
-    .card__head-right { width: 100%; justify-content: space-between; }
   }
 
   /* ==========================================================
