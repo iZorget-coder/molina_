@@ -1,11 +1,11 @@
 {
   "SPX": {
     "bias": "UP",
-    "confidence": 0.4390467773922619,
+    "confidence": 0.43904677739226194,
     "probabilities": {
-      "UP": 0.4390467773922619,
+      "UP": 0.43904677739226194,
       "DOWN": 0.31905210934594486,
-      "CONSOLIDATION": 0.2419011132617937
+      "CONSOLIDATION": 0.24190111326179373
     },
     "signals": [
       "Bull Breaker",
@@ -381,11 +381,11 @@
   },
   "DJI": {
     "bias": "UP",
-    "confidence": 0.4211308376363818,
+    "confidence": 0.4211308376363817,
     "probabilities": {
-      "UP": 0.4211308376363818,
+      "UP": 0.4211308376363817,
       "DOWN": 0.37168571043389564,
-      "CONSOLIDATION": 0.20718345192972226
+      "CONSOLIDATION": 0.2071834519297223
     },
     "signals": [
       "Bull Breaker",
