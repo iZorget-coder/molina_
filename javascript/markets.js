@@ -1,4 +1,4 @@
-import { MARKETS, fetchLatestPredictions, formatLong } from './predictions.js';
+import { MARKETS, fetchLatestPredictions, formatLong, subscribeLiveHourly } from './predictions.js';
 import { zoneKey, zoneRgb } from './zones.js';
 
 const STORAGE_KEY = 'molina:market';
@@ -312,6 +312,105 @@ function niceTicks(lo, hi, target) {
   return { ticks: ticks.length ? ticks : [lo, hi], decimals };
 }
 
+
+/* ==========================================================
+   Live hourly feed
+
+   live_hourly/latest is refreshed every hour by the "Hourly Live
+   Candles" workflow (fetch only, the model is not re-run). Those
+   candles are merged over the stored 1H candles, and the day's
+   entry / stop / target are checked against them to show whether
+   the limit order has filled, hit its stop or reached its target.
+   ========================================================== */
+
+let liveData = null;          // { candles, source, updatedAt } for the open market, or null
+let unsubLive = null;
+let forecastDayIso = null;
+
+/** Stored 1H candles + live candles, one entry per hour (live wins), times as ISO strings. */
+function mergeLive(raw, live) {
+  const byMs = new Map();
+  const put = (c, isLive) => {
+    const ms = toMs(c?.time);
+    if (Number.isFinite(ms)) byMs.set(ms, { ...c, time: new Date(ms).toISOString(), live: isLive });
+  };
+  (Array.isArray(raw) ? raw : []).forEach((c) => put(c, false));
+  (live?.candles || []).forEach((c) => put(c, true));
+  return [...byMs.values()];
+}
+
+/** Cleaned candles for a timeframe, with the live feed merged into 1H. */
+function chartRows(m, isH1) {
+  if (!isH1) return cleanCandles(m?.candles, '1D');
+  return cleanCandles(liveData ? mergeLive(m?.candlesH1, liveData) : m?.candlesH1, '1H');
+}
+
+/**
+ * Walks the candles from the start of the forecast day and reports what the limit order did.
+ * Same rules as the model's training simulation: the order fills when price reaches the entry,
+ * the stop wins a tie, and the fill bar cannot reach the target.
+ */
+export function evaluateTrade(t, rows, fromMs) {
+  if (!t || (t.action !== 'LONG' && t.action !== 'SHORT')) return null;
+  if (![t.entry, t.stopLoss, t.takeProfit].every(Number.isFinite)) return null;
+  const long = t.action === 'LONG';
+  const risk = Math.abs(t.entry - t.stopLoss);
+  if (!(risk > 0)) return null;
+  const bars = rows.filter((c) => toMs(c.time) >= fromMs);
+  if (!bars.length) return { state: 'pending' };
+
+  const hitStop = (c) => (long ? c.low <= t.stopLoss : c.high >= t.stopLoss);
+  const hitTarget = (c) => (long ? c.high >= t.takeProfit : c.low <= t.takeProfit);
+  const rOf = (p) => (long ? p - t.entry : t.entry - p) / risk;
+
+  let fill = null;
+  for (const c of bars) {
+    if (!fill) {
+      if (long ? c.low <= t.entry : c.high >= t.entry) {
+        fill = { time: c.time };
+        if (hitStop(c)) return { state: 'stopped', fill, exit: { time: c.time, price: t.stopLoss }, r: -1 };
+      } else if (hitTarget(c)) {
+        return { state: 'missed', exit: { time: c.time, price: t.takeProfit } };
+      }
+      continue;
+    }
+    if (hitStop(c)) return { state: 'stopped', fill, exit: { time: c.time, price: t.stopLoss }, r: -1 };
+    if (hitTarget(c)) return { state: 'target', fill, exit: { time: c.time, price: t.takeProfit }, r: rOf(t.takeProfit) };
+  }
+  const last = bars[bars.length - 1];
+  return fill
+    ? { state: 'open', fill, r: rOf(last.close), price: last.close }
+    : { state: 'waiting', price: last.close, away: Math.abs(last.close - t.entry) };
+}
+
+function tradeStatus() {
+  const t = currentMarket?.trade;
+  if (!liveData || !t || !forecastDayIso) return null;
+  const { rows } = chartRows(currentMarket, true);
+  return evaluateTrade(t, rows, Date.parse(`${forecastDayIso}T00:00:00Z`));
+}
+
+const signedR = (r) => `${r >= 0 ? '+' : '-'}${Math.abs(r).toFixed(1)}R`;
+
+function paintTradeStatus() {
+  const el = $('setup-status');
+  if (!el) return;
+  const st = tradeStatus();
+  if (!st) { el.hidden = true; return; }
+  const text = {
+    pending: () => 'Waiting for the first hourly candle of the forecast day',
+    waiting: () => `Limit order waiting · price ${fmt(st.price)}, ${fmt(st.away)} pts from entry`,
+    open: () => `Filled · open ${signedR(st.r)} · price ${fmt(st.price)}`,
+    target: () => `Target reached · ${signedR(st.r)}`,
+    stopped: () => 'Stopped out · -1.0R',
+    missed: () => 'Missed · target traded before the entry filled',
+  }[st.state]();
+  const tone = { target: 'up', stopped: 'down', open: st.r >= 0 ? 'up' : 'down' }[st.state] || 'flat';
+  el.dataset.tone = tone;
+  el.textContent = text;
+  el.hidden = false;
+}
+
 /* ==========================================================
    SMC overlay (subtle, optional)
 
@@ -351,8 +450,12 @@ function saveSmcState() {
   try { localStorage.setItem(SMC_STORE, JSON.stringify(smcState)); } catch { /* ignore */ }
 }
 
-const toMs = (v) =>
-  typeof v === 'string' ? Date.parse(/^\d{4}-\d{2}-\d{2} /.test(v) ? v.replace(' ', 'T') : v) : NaN;
+const toMs = (v) => {
+  if (typeof v !== 'string') return NaN;
+  let s = /^\d{4}-\d{2}-\d{2} /.test(v) ? v.replace(' ', 'T') : v;
+  if (/T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s)) s += 'Z'; // no zone given = UTC
+  return Date.parse(s);
+};
 
 /** Build the SVG for the overlay. `back` goes under the candles, `front` over them. */
 function buildSmcOverlay({ set, candles, isH1, PAD, plotW, plotH, plotRight, barW, y, lo, hi, layers }) {
@@ -521,7 +624,7 @@ function paintChart() {
   const m = currentMarket;
   const isH1 = currentTimeframe === '1H';
 
-  const { rows, dropped } = cleanCandles(isH1 ? m?.candlesH1 : m?.candles, currentTimeframe);
+  const { rows, dropped } = chartRows(m, isH1);
 
   if (dropped > 0) {
     console.warn(
@@ -551,6 +654,7 @@ function paintChart() {
     const last = candles[candles.length - 1];
     lastDateEl.textContent =
       `Last: ${formatCandleLabel(last, currentTimeframe)}` +
+      (isH1 && liveData ? ` · live${liveData.updatedAt ? ` ${String(liveData.updatedAt.getUTCHours()).padStart(2, '0')}:${String(liveData.updatedAt.getUTCMinutes()).padStart(2, '0')} UTC` : ''}` : '') +
       (dropped ? ` · ${dropped} bad candle${dropped === 1 ? '' : 's'} hidden` : '');
   }
 
@@ -649,12 +753,13 @@ function paintChart() {
     const up = c.close >= c.open;
     const color = up ? '#22c55e' : '#ef4444';
 
-    html += `<line x1="${x}" y1="${y(c.high)}" x2="${x}" y2="${y(c.low)}" stroke="${color}" stroke-width="1"/>`;
+    const fade = c.partial ? ' opacity="0.55"' : '';
+    html += `<line x1="${x}" y1="${y(c.high)}" x2="${x}" y2="${y(c.low)}" stroke="${color}" stroke-width="1"${fade}/>`;
 
     const bodyTop = y(Math.max(c.open, c.close));
     const bodyBot = y(Math.min(c.open, c.close));
     const bodyH = Math.max(bodyBot - bodyTop, 1);
-    html += `<rect x="${x - bodyW / 2}" y="${bodyTop}" width="${bodyW}" height="${bodyH}" fill="${color}"/>`;
+    html += `<rect x="${x - bodyW / 2}" y="${bodyTop}" width="${bodyW}" height="${bodyH}" fill="${color}"${fade}/>`;
   });
 
   html += smcFront;
@@ -669,6 +774,19 @@ function paintChart() {
   inside.forEach((l) => {
     html += `<line x1="${PAD.left}" y1="${l.y}" x2="${plotRight}" y2="${l.y}" stroke="${l.color}" stroke-width="1" stroke-dasharray="6 4"/>`;
   });
+
+  // live markers: where the order filled and where it exited
+  const st = isH1 ? tradeStatus() : null;
+  if (st && t) {
+    const at = (time) => candles.findIndex((c) => toMs(c.time) === toMs(time));
+    const mark = (time, price, color, label) => {
+      const i = at(time);
+      if (i < 0 || price < lo || price > hi) return;
+      html += `<g><title>${label} · ${fmt(price)}</title><circle cx="${PAD.left + i * barW + barW / 2}" cy="${y(price)}" r="4.5" fill="none" stroke="${color}" stroke-width="1.6"/></g>`;
+    };
+    if (st.fill) mark(st.fill.time, t.entry, '#818cf8', 'Order filled');
+    if (st.exit) mark(st.exit.time, st.exit.price, st.state === 'stopped' ? '#ef4444' : '#22c55e', st.state === 'stopped' ? 'Stopped out' : st.state === 'target' ? 'Target reached' : 'Target traded before fill');
+  }
 
   // De-overlap the tag y-positions.
   inside.sort((a, b) => a.y - b.y);
@@ -806,6 +924,9 @@ function paintSmc(symbol, m) {
 export async function initMarketPage() {
   const symbol = selectedSymbol();
   loadSmcState();
+  unsubLive?.();
+  unsubLive = null;
+  liveData = null;
 
   setText('mk-symbol', symbol);
   setText('mk-sub', `${DESCRIPTIONS[symbol]} · Daily`);
@@ -817,6 +938,7 @@ export async function initMarketPage() {
     const m = live?.bySymbol[symbol] ?? null;
     currentMarket = m;
     currentSymbol = symbol;
+    forecastDayIso = live?.forecastDay ?? null;
 
     paintHeader(symbol, m);
     paintPrediction(symbol, m, live);
@@ -827,6 +949,14 @@ export async function initMarketPage() {
     paintChart();
     watchChartSize();
     bindTimeframeButtons();
+
+    // hourly candles pushed by the hourly workflow: redraw whenever a new snapshot arrives
+    unsubLive = subscribeLiveHourly(symbol, (data) => {
+      if (!$('price-chart') || currentSymbol !== symbol) { unsubLive?.(); return; }
+      liveData = data;
+      paintTradeStatus();
+      paintChart();
+    });
   } catch (err) {
     console.error('Could not load the market', err);
     if (!$('pred-title')) return;

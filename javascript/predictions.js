@@ -1,4 +1,4 @@
-import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs, doc, onSnapshot } from 'firebase/firestore';
 import { auth, onAuthStateChanged, db } from './firebase.js';
 
 /* ---------- The five markets the app supports ---------- */
@@ -266,4 +266,42 @@ export function fetchLatestPredictions({ force = false } = {}) {
   });
 
   return inflight;
+}
+
+/* ---------- Live hourly candles ---------- */
+// live_hourly/latest is rewritten every hour by the "Hourly Live Candles" workflow (no model run).
+// shape: { symbols: { SPX: { source, fetched_at, candles: [{time, open, high, low, close, partial}] } }, updated_at }
+function normaliseLive(data, symbol) {
+  const s = data?.symbols?.[symbol];
+  if (!s || !Array.isArray(s.candles)) return null;
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const candles = s.candles
+    .map((c) => ({
+      time: typeof c?.time === 'string' ? c.time : null,
+      open: num(c?.open), high: num(c?.high), low: num(c?.low), close: num(c?.close),
+      partial: Boolean(c?.partial),
+    }))
+    .filter((c) => c.time && c.open !== null && c.high !== null && c.low !== null && c.close !== null);
+  if (!candles.length) return null;
+  return {
+    candles,
+    source: s.source ?? null,
+    fetchedAt: typeof s.fetched_at === 'string' ? s.fetched_at : null,
+    updatedAt: data.updated_at?.toDate ? data.updated_at.toDate() : null,
+  };
+}
+
+/** Calls onData(liveOrNull) now and after every hourly update. Returns an unsubscribe function. */
+export function subscribeLiveHourly(symbol, onData, onError) {
+  let stopped = false;
+  let unsub = () => {};
+  authReady.then(() => {
+    if (stopped) return;
+    unsub = onSnapshot(
+      doc(db, 'live_hourly', 'latest'),
+      (snap) => onData(snap.exists() ? normaliseLive(snap.data(), symbol) : null),
+      (err) => { console.warn('Live hourly feed unavailable', err); onError?.(err); }
+    );
+  });
+  return () => { stopped = true; unsub(); };
 }
