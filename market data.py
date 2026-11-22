@@ -123,8 +123,8 @@ IFVG_WINDOW = 60
 BREAKER_WINDOW = 30
 MAX_ENTRY_DIST_ATR = 1.5     # entry may be at most this far from the current close
 MIN_RISK_ATR = 0.4
-MAX_RISK_ATR = 2.0
-STOP_BUF_ATR = 0.10
+MAX_RISK_ATR = 2.5
+STOP_BUF_ATR = 0.35          # breathing room beyond the zone / swing the stop hides behind
 TARGET_BUF_ATR = 0.05
 MIN_RR = 1.0
 MAX_RR = 4.0
@@ -441,8 +441,8 @@ def _features(P, t, side, z, E, S, T, rr, e_frac, s_style, rank, is_eq, ctx, con
 
 RELAX = [   # (max_entry_dist, min_risk, max_risk, min_rr, max_rr) -- tried in order until a candidate exists
     (MAX_ENTRY_DIST_ATR, MIN_RISK_ATR, MAX_RISK_ATR, MIN_RR, MAX_RR),
-    (3.0, 0.25, 3.0, 0.8, 6.0),
-    (6.0, 0.20, 4.0, 0.5, 10.0),
+    (3.0, 0.35, 3.5, 0.8, 6.0),
+    (6.0, 0.30, 4.5, 0.5, 10.0),
 ]
 
 
@@ -679,10 +679,10 @@ def _fallback_candidate(P: dict, t: int, side: str):
     swing_px = float(P["l"][w0:t + 1].min()) if long else float(P["h"][w0:t + 1].max())
     S = swing_px - STOP_BUF_ATR * atr if long else swing_px + STOP_BUF_ATR * atr
     risk = abs(E - S)
-    if risk < 0.5 * atr:
-        S = E - 0.5 * atr if long else E + 0.5 * atr
-    elif risk > 1.5 * atr:
-        S = E - 1.5 * atr if long else E + 1.5 * atr
+    if risk < 0.75 * atr:
+        S = E - 0.75 * atr if long else E + 0.75 * atr
+    elif risk > 2.0 * atr:
+        S = E - 2.0 * atr if long else E + 2.0 * atr
     risk = abs(E - S)
     tgt_sw = _live_swings(P, t, "sh" if long else "sl")
     tl = sorted([p for _, p in tgt_sw if (p > E + 0.3 * atr if long else p < E - 0.3 * atr)],
@@ -734,7 +734,7 @@ def pick_live_trade(P: dict, t: int, side: str, ctx: dict, model: dict):
     else:
         cd, etype, tsrc = _fallback_candidate(P, t, side)
         z = cd["zone"]; score = 0.0
-        ssrc = f"beyond recent H1 swing {'low' if long else 'high'} (clamped 0.5-1.5 ATR)"
+        ssrc = f"beyond recent H1 swing {'low' if long else 'high'} (clamped 0.75-2.0 ATR)"
     hr = int(P["hour"][z["known"]]) if z.get("known") is not None else int(P["hour"][t])
     kz = "London KZ" if 7 <= hr < 10 else ("Silver Bullet" if 14 <= hr < 15
                                             else ("NY AM KZ" if 12 <= hr < 15 else "none"))
