@@ -340,7 +340,7 @@ function paintChart() {
     );
   }
 
-  const candles = narrow ? rows.slice(-60) : rows;
+ const candles = narrow ? rows.slice(-70) : rows.slice(-100);
 
   if (titleEl) {
     titleEl.textContent = `Price, ${candles.length} ${isH1 ? 'hourly' : 'daily'} candles`;
