@@ -992,6 +992,11 @@ export async function initMarketPage() {
   unsubLive?.();
   unsubLive = null;
   liveData = null;
+  // the page is rebuilt with the 1D button active, so the chart must start on 1D too
+  // (this variable outlives the page when you switch markets)
+  currentTimeframe = '1D';
+  currentMarket = null;
+  currentSymbol = null;
 
   setText('mk-symbol', symbol);
   setText('mk-sub', `${DESCRIPTIONS[symbol]} · Daily`);
