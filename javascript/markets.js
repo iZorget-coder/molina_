@@ -339,9 +339,63 @@ function mergeLive(raw, live) {
   return [...byMs.values()];
 }
 
-/** Cleaned candles for a timeframe, with the live feed merged into 1H. */
+/** Trading day of an hour (futures reopen ~22:00-23:00 UTC, so +2h puts that open on the next day). */
+const tradingDay = (ms) => new Date(ms + 2 * 3600000).toISOString().slice(0, 10);
+
+/**
+ * Daily candles + the days the live hourly candles add or extend.
+ * - a day after the last stored daily candle is built from its hourly candles;
+ * - the newest live day that already has a stored candle gets its high / low stretched and its close moved;
+ * - older stored days are left exactly as the daily pipeline saved them.
+ * The candle for a day that is still trading is flagged `partial` (drawn dotted).
+ */
+export function mergeDaily(raw, live) {
+  const daily = (Array.isArray(raw) ? raw : []).map((c) => ({ ...c }));
+  if (!live?.candles?.length) return daily;
+
+  const days = new Map();
+  [...live.candles]
+    .map((c) => ({ ...c, ms: toMs(c.time) }))
+    .filter((c) => Number.isFinite(c.ms))
+    .sort((a, b) => a.ms - b.ms)
+    .forEach((c) => {
+      const d = tradingDay(c.ms);
+      const a = days.get(d);
+      if (!a) days.set(d, { date: d, open: c.open, high: c.high, low: c.low, close: c.close, partial: Boolean(c.partial), live: true });
+      else {
+        a.high = Math.max(a.high, c.high);
+        a.low = Math.min(a.low, c.low);
+        a.close = c.close;
+        a.partial = Boolean(c.partial);
+      }
+    });
+
+  const dates = [...days.keys()].sort();
+  const newest = dates[dates.length - 1];
+  const lastStored = daily.map((c) => c.date).filter(Boolean).sort().pop() || '';
+
+  dates.forEach((d) => {
+    const a = days.get(d);
+    if (d > lastStored) {
+      const dow = new Date(`${d}T00:00:00Z`).getUTCDay();
+      if (dow !== 0 && dow !== 6) daily.push(a);       // never a weekend candle
+    } else if (d === lastStored && d === newest) {
+      const c = daily.find((x) => x.date === d);
+      if (c) {
+        c.high = Math.max(Number(c.high), a.high);
+        c.low = Math.min(Number(c.low), a.low);
+        c.close = a.close;
+        c.partial = a.partial;
+        c.live = true;
+      }
+    }
+  });
+  return daily;
+}
+
+/** Cleaned candles for a timeframe, with the live feed merged in. */
 function chartRows(m, isH1) {
-  if (!isH1) return cleanCandles(m?.candles, '1D');
+  if (!isH1) return cleanCandles(liveData ? mergeDaily(m?.candles, liveData) : m?.candles, '1D');
   return cleanCandles(liveData ? mergeLive(m?.candlesH1, liveData) : m?.candlesH1, '1H');
 }
 
@@ -659,18 +713,14 @@ function paintChart() {
   }
 
   // live feed time: own element in the SMC row (the header line is hidden on some phones)
- const liveEl = $('live-note');
-if (liveEl) {
-  const u = liveData?.updatedAt;
-  liveEl.hidden = !(isH1 && liveData);
-  if (u) {
-    // Clone and add 1 hour
-    const shifted = new Date(u.getTime() + 60 * 60 * 1000);
-    liveEl.textContent = `● live ${String(shifted.getUTCHours()).padStart(2, '0')}:${String(shifted.getUTCMinutes()).padStart(2, '0')} SAST`;
-  } else {
-    liveEl.textContent = '● live';
+  const liveEl = $('live-note');
+  if (liveEl) {
+    const u = liveData?.updatedAt;
+    liveEl.hidden = !(isH1 && liveData);
+    liveEl.textContent = u
+      ? `● live ${String(u.getUTCHours()).padStart(2, '0')}:${String(u.getUTCMinutes()).padStart(2, '0')} UTC`
+      : '● live';
   }
-}
 
   /* ----- Price range ----- */
   const lastClose = candles[candles.length - 1].close;
@@ -767,13 +817,14 @@ if (liveEl) {
     const up = c.close >= c.open;
     const color = up ? '#22c55e' : '#ef4444';
 
-    const fade = c.partial ? ' opacity="0.55"' : '';
-    html += `<line x1="${x}" y1="${y(c.high)}" x2="${x}" y2="${y(c.low)}" stroke="${color}" stroke-width="1"${fade}/>`;
+    // a candle that is still forming is only an outline (dotted), so it can't be mistaken for a finished one
+    const forming = Boolean(c.partial);
+    html += `<line x1="${x}" y1="${y(c.high)}" x2="${x}" y2="${y(c.low)}" stroke="${color}" stroke-width="1"${forming ? ' stroke-dasharray="2 2"' : ''}/>`;
 
     const bodyTop = y(Math.max(c.open, c.close));
     const bodyBot = y(Math.min(c.open, c.close));
     const bodyH = Math.max(bodyBot - bodyTop, 1);
-    html += `<rect x="${x - bodyW / 2}" y="${bodyTop}" width="${bodyW}" height="${bodyH}" fill="${color}"${fade}/>`;
+    html += `<rect x="${x - bodyW / 2}" y="${bodyTop}" width="${bodyW}" height="${bodyH}" ${forming ? `fill="none" stroke="${color}" stroke-width="1.2" stroke-dasharray="2 2"` : `fill="${color}"`}/>`;
   });
 
   html += smcFront;
@@ -933,7 +984,7 @@ function paintSmc(symbol, m) {
   wide.innerHTML = wideItems.map((item) => signalHtml(item, ' signal--wide')).join('');
 }
 
-
+/* ---------- Page entry point ---------- */
 
 export async function initMarketPage() {
   const symbol = selectedSymbol();
