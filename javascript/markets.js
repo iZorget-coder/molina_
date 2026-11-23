@@ -659,14 +659,18 @@ function paintChart() {
   }
 
   // live feed time: own element in the SMC row (the header line is hidden on some phones)
-  const liveEl = $('live-note');
-  if (liveEl) {
-    const u = liveData?.updatedAt;
-    liveEl.hidden = !(isH1 && liveData);
-    liveEl.textContent = u
-      ? `● live ${String(u.getUTCHours()).padStart(2, '0')}:${String(u.getUTCMinutes()).padStart(2, '0')} UTC`
-      : '● live';
+ const liveEl = $('live-note');
+if (liveEl) {
+  const u = liveData?.updatedAt;
+  liveEl.hidden = !(isH1 && liveData);
+  if (u) {
+    // Clone and add 1 hour
+    const shifted = new Date(u.getTime() + 60 * 60 * 1000);
+    liveEl.textContent = `● live ${String(shifted.getUTCHours()).padStart(2, '0')}:${String(shifted.getUTCMinutes()).padStart(2, '0')} UTC`;
+  } else {
+    liveEl.textContent = '● live';
   }
+}
 
   /* ----- Price range ----- */
   const lastClose = candles[candles.length - 1].close;
@@ -929,7 +933,7 @@ function paintSmc(symbol, m) {
   wide.innerHTML = wideItems.map((item) => signalHtml(item, ' signal--wide')).join('');
 }
 
-/* ---------- Page entry point ---------- */
+
 
 export async function initMarketPage() {
   const symbol = selectedSymbol();
