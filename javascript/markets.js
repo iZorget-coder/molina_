@@ -405,9 +405,22 @@ export function mergeDaily(raw, live) {
   return daily;
 }
 
+/** Index / gold futures have no Saturday or Sunday session. A weekend-dated daily candle is only the
+ *  first hour or two of Sunday evening's open, so it is dropped (that hour belongs to Monday's candle). */
+export const dropWeekendDays = (arr) =>
+  (Array.isArray(arr) ? arr : []).filter((c) => {
+    const t = Date.parse(c?.date);
+    if (!Number.isFinite(t)) return true;
+    const dow = new Date(t).getUTCDay();
+    return dow !== 0 && dow !== 6;
+  });
+
 /** Cleaned candles for a timeframe, with the live feed merged in. */
 function chartRows(m, isH1) {
-  if (!isH1) return cleanCandles(liveData ? mergeDaily(m?.candles, liveData) : m?.candles, '1D');
+  if (!isH1) {
+    const daily = liveData ? mergeDaily(m?.candles, liveData) : m?.candles;
+    return cleanCandles(dropWeekendDays(daily), '1D');
+  }
   return cleanCandles(liveData ? mergeLive(m?.candlesH1, liveData) : m?.candlesH1, '1H');
 }
 
