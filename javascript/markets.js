@@ -372,6 +372,18 @@ export function mergeDaily(raw, live) {
 
   const dates = [...days.keys()].sort();
   const newest = dates[dates.length - 1];
+
+  // While today is still trading, the daily file may hold an unfinished candle for today (or a
+  // Sunday one). It is dropped so the chart has ONE current-day candle, built from the hourly bars.
+  if (days.get(newest).partial) {
+    const cut = Date.parse(`${newest}T00:00:00Z`);
+    for (let i = daily.length - 1; i >= 0; i--) {
+      const t = Date.parse(daily[i].date);
+      if (!Number.isFinite(t)) continue;
+      const dow = new Date(t).getUTCDay();
+      if (t >= cut || ((dow === 0 || dow === 6) && t >= cut - 3 * 86400000)) daily.splice(i, 1);
+    }
+  }
   const lastStored = daily.map((c) => c.date).filter(Boolean).sort().pop() || '';
 
   dates.forEach((d) => {
@@ -817,14 +829,12 @@ function paintChart() {
     const up = c.close >= c.open;
     const color = up ? '#22c55e' : '#ef4444';
 
-    // a candle that is still forming is only an outline (dotted), so it can't be mistaken for a finished one
-    const forming = Boolean(c.partial);
-    html += `<line x1="${x}" y1="${y(c.high)}" x2="${x}" y2="${y(c.low)}" stroke="${color}" stroke-width="1"${forming ? ' stroke-dasharray="2 2"' : ''}/>`;
+    html += `<line x1="${x}" y1="${y(c.high)}" x2="${x}" y2="${y(c.low)}" stroke="${color}" stroke-width="1"/>`;
 
     const bodyTop = y(Math.max(c.open, c.close));
     const bodyBot = y(Math.min(c.open, c.close));
     const bodyH = Math.max(bodyBot - bodyTop, 1);
-    html += `<rect x="${x - bodyW / 2}" y="${bodyTop}" width="${bodyW}" height="${bodyH}" ${forming ? `fill="none" stroke="${color}" stroke-width="1.2" stroke-dasharray="2 2"` : `fill="${color}"`}/>`;
+    html += `<rect x="${x - bodyW / 2}" y="${bodyTop}" width="${bodyW}" height="${bodyH}" fill="${color}"/>`;
   });
 
   html += smcFront;
