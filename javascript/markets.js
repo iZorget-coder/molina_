@@ -719,6 +719,17 @@ function paintChart() {
       const n = COUNTS[currentTimeframe][narrow ? 'narrow' : 'wide'];
       const candles = rows.slice(-n);
 
+  if (isH1 && candles.length > 1) {
+    // diagnostic: report any missing hour in the visible range (open the browser console to see it)
+    const gaps = [];
+    for (let i = 1; i < candles.length; i++) {
+      const d = (toMs(candles[i].time) - toMs(candles[i - 1].time)) / 3600000;
+      if (d > 1) gaps.push(`${candles[i - 1].time} -> ${candles[i].time} (${d - 1}h missing)`);
+    }
+    console.info(`[chart] ${currentSymbol} 1H last 4:`, candles.slice(-4).map((c) => `${c.time}${c.live ? ' live' : ' stored'}`));
+    if (gaps.length) console.info(`[chart] ${currentSymbol} 1H gaps:`, gaps);
+  }
+
   if (titleEl) {
     titleEl.textContent = `Price, ${candles.length} ${isH1 ? 'hourly' : 'daily'} candles`;
   }
