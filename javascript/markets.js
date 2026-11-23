@@ -666,7 +666,7 @@ if (liveEl) {
   if (u) {
     // Clone and add 1 hour
     const shifted = new Date(u.getTime() + 60 * 60 * 1000);
-    liveEl.textContent = `● live ${String(shifted.getUTCHours()).padStart(2, '0')}:${String(shifted.getUTCMinutes()).padStart(2, '0')} UTC`;
+    liveEl.textContent = `● live ${String(shifted.getUTCHours()).padStart(2, '0')}:${String(shifted.getUTCMinutes()).padStart(2, '0')} SAST`;
   } else {
     liveEl.textContent = '● live';
   }
