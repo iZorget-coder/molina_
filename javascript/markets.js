@@ -753,7 +753,7 @@ function paintChart() {
   if (liveEl) {
     const u = liveData?.updatedAt;
     liveEl.hidden = !(isH1 && liveData);
-    const shown = u ? new Date(u.getTime() + 3600000) : null;   // shown 1 hour ahead of UTC
+    const shown = u ? new Date(u.getTime() + 3600000) : null;  
     liveEl.textContent = shown
       ? `● live ${String(shown.getUTCHours()).padStart(2, '0')}:${String(shown.getUTCMinutes()).padStart(2, '0')} UTC`
       : '● live';
