@@ -77,18 +77,39 @@ function formatCandleLabel(c, timeframe) {
 
 /* ---------- Header ---------- */
 
+/**
+ * Latest price + change since the last daily close, from the live hourly feed.
+ * Only used once the live feed has moved on to a trading day AFTER the last daily close (e.g. Monday's
+ * hours while the stored close is Friday's); otherwise the stored daily close / change are shown.
+ */
+function liveHeaderPrice(m) {
+  const candles = liveData?.candles;
+  if (!m || !candles?.length || !Number.isFinite(m.close) || !m.closeDate) return null;
+  const last = candles.reduce((a, c) => (toMs(c.time) > toMs(a.time) ? c : a), candles[0]);
+  const ms = toMs(last.time);
+  if (!Number.isFinite(ms) || !Number.isFinite(last.close) || last.close <= 0) return null;
+  if (tradingDay(ms) <= m.closeDate) return null;                  // no new session since the daily close
+  const change = (last.close / m.close - 1) * 100;
+  const v = Math.round(change * 100) / 100;
+  return { price: fmt(last.close), change, changeText: `${v < 0 ? '-' : '+'}${Math.abs(v).toFixed(2)}%` };
+}
+
 function paintHeader(symbol, m) {
   setText('mk-symbol', symbol);
   setText('mk-sub', `${DESCRIPTIONS[symbol]} · Daily`);
-  setText('mk-price', m ? m.price : '—');
+  const lv = liveHeaderPrice(m);
+  const shown = lv ?? (m ? { price: m.price, change: m.change, changeText: m.changeText } : null);
+  setText('mk-price', shown ? shown.price : '—');
+  const priceEl = $('mk-price');
+  if (priceEl) priceEl.title = lv ? 'Latest hourly price · change since the last daily close' : 'Last daily close';
 
   const delta = $('mk-delta');
   if (!delta) return;
-  if (m && m.change !== null) {
-    const up = m.change >= 0;
-    const tone = Math.abs(m.change) < 0.1 ? 'flat' : up ? 'up' : 'down';
+  if (shown && shown.change !== null && shown.change !== undefined) {
+    const up = shown.change >= 0;
+    const tone = Math.abs(shown.change) < 0.1 ? 'flat' : up ? 'up' : 'down';
     delta.className = `delta ${tone}`;
-    delta.textContent = `${up ? '▲' : '▼'} ${m.changeText}`;
+    delta.textContent = `${up ? '▲' : '▼'} ${shown.changeText}`;
   } else {
     delta.className = 'delta';
     delta.textContent = '';
@@ -1059,6 +1080,7 @@ export async function initMarketPage() {
     unsubLive = subscribeLiveHourly(symbol, (data) => {
       if (!$('price-chart') || currentSymbol !== symbol) { unsubLive?.(); return; }
       liveData = data;
+      paintHeader(symbol, currentMarket);
       paintTradeStatus();
       paintChart();
     });
