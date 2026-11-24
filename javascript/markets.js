@@ -464,7 +464,7 @@ function chartRows(m, tf) {
     return cleanCandles(mergeLive([], liveFifteen), '15m');
   }
   return cleanCandles(liveData ? mergeLive(m?.candlesH1, liveData) : m?.candlesH1, '1H');
-}
+}=
 
 /**
  * Walks the candles from the start of the forecast day and reports what the limit order did.
@@ -794,20 +794,19 @@ function paintChart() {
       `Last: ${formatCandleLabel(last, currentTimeframe)}` +
       (dropped ? ` · ${dropped} bad candle${dropped === 1 ? '' : 's'} hidden` : '');
   }
-  
+
   // live feed time: own element in the SMC row (the header line is hidden on some phones)
   const liveEl = $('live-note');
   if (liveEl) {
     liveEl.hidden = !(isH1 && activeLive);
 
     let shown = null;
-    if (tf === '15m') {
-      // newest 15-minute candle received, shown one hour earlier:
-      // 23:15 candle -> "live 22:15 UTC", 23:30 candle -> "live 22:30 UTC"
+       if (tf === '15m') {
+      // newest 15-minute candle in the feed (21:15 in the feed) shown as 23:15 UTC
       const newest = Math.max(
         ...(activeLive?.candles ?? []).map((c) => toMs(c.time)).filter(Number.isFinite)
       );
-      if (Number.isFinite(newest)) shown = new Date(newest - 3600000);
+      if (Number.isFinite(newest)) shown = new Date(newest + 2 * 3600000);
     } else if (activeLive?.updatedAt) {
       // hourly feed: unchanged (update time + 1 hour)
       shown = new Date(activeLive.updatedAt.getTime() + 3600000);
