@@ -1,12 +1,16 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, auth, onAuthStateChanged } from './firebase.js';
-import { MARKETS, fetchLatestPredictions } from './predictions.js';
-import { selectMarket } from './markets.js';
+import { MARKETS, fetchLatestPredictions, subscribeLiveHourly } from './predictions.js';
+import { selectMarket, liveHeaderPrice } from './markets.js';
 
 const DEFAULT_WATCHLIST = ['SPX'];
 
 let cachedSymbols = null;
 let authReady = null;
+
+// symbol -> latest live hourly snapshot, exactly like markets.js's `liveData`
+const liveBySymbol = new Map();
+const unsubs = new Map();
 
 function whenAuthReady() {
   if (authReady) return authReady;
@@ -63,12 +67,36 @@ async function loadLive() {
   return live;
 }
 
+/* ---------- Hourly feed (same pattern markets.js uses with unsubLive / liveData) ---------- */
+
+function trackLive(symbols, onChange) {
+  // stop watching symbols that left the watchlist
+  for (const [sym, unsub] of unsubs) {
+    if (!symbols.includes(sym)) { unsub(); unsubs.delete(sym); liveBySymbol.delete(sym); }
+  }
+  // start watching new ones
+  for (const sym of symbols) {
+    if (unsubs.has(sym)) continue;
+    liveBySymbol.set(sym, null);
+    unsubs.set(sym, subscribeLiveHourly(sym, (data) => {
+      liveBySymbol.set(sym, data);
+      onChange(sym, data);
+    }));
+  }
+}
+
+export function disposeWatchlistLive() {
+  for (const unsub of unsubs.values()) unsub();
+  unsubs.clear();
+  liveBySymbol.clear();
+}
+
  
 function getMarket(symbol) {
   const meta = MARKETS.find(m => m.symbol === symbol);
   if (!meta) return null;
 
-  return live?.bySymbol[symbol] || {
+  const base = live?.bySymbol[symbol] || {
     ...meta,
     sub: `${meta.symbol} · ${meta.type}`,
     hasForecast: false,
@@ -79,6 +107,12 @@ function getMarket(symbol) {
     change: null,
     changeText: '—',
   };
+
+  // Same override the markets header uses: hourly close wins once a new
+  // session has started past the last daily close. `liveHeaderPrice` reads
+  // `close` + `date` (falling back to `closeDate`) from the base object.
+  const hourly = liveHeaderPrice(base, liveBySymbol.get(symbol));
+  return hourly ? { ...base, ...hourly } : base;
 }
 
  
@@ -132,20 +166,28 @@ export async function loadWatchlistPage() {
 
   try {
     const [symbols] = await Promise.all([fetchWatchlist(), loadLive()]);
-    const markets = symbols.map(getMarket).filter(Boolean);
-
-    if (!markets.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="view-empty">Your watchlist is empty. Add a market to get started.</td></tr>';
-    } else {
-      tbody.innerHTML = markets.map(watchRowMarkup).join('');
-    }
-
-    const countEl = document.getElementById('watchlist-count');
-    if (countEl) countEl.textContent = `${markets.length} ${markets.length === 1 ? 'market' : 'markets'}`;
+    trackLive(symbols, () => renderWatchlistPage(symbols));
+    renderWatchlistPage(symbols);
   } catch (err) {
     console.error(err);
     tbody.innerHTML = '<tr><td colspan="5" class="view-error">Could not load watchlist.</td></tr>';
   }
+}
+
+function renderWatchlistPage(symbols) {
+  const tbody = document.querySelector('#watchlist-table tbody');
+  if (!tbody) return;
+
+  const markets = symbols.map(getMarket).filter(Boolean);
+
+  if (!markets.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="view-empty">Your watchlist is empty. Add a market to get started.</td></tr>';
+  } else {
+    tbody.innerHTML = markets.map(watchRowMarkup).join('');
+  }
+
+  const countEl = document.getElementById('watchlist-count');
+  if (countEl) countEl.textContent = `${markets.length} ${markets.length === 1 ? 'market' : 'markets'}`;
 }
 
 /* ---------- Dashboard sidebar rendering ---------- */
@@ -174,18 +216,26 @@ export async function loadDashboardWatchlist() {
 
   try {
     const [symbols] = await Promise.all([fetchWatchlist(), loadLive()]);
-    const markets = symbols.map(getMarket).filter(Boolean);
-
-    list.innerHTML = markets.length
-      ? markets.map(dashboardItemMarkup).join('')
-      : '<li class="watch__item"><p class="view-empty">No markets yet.</p></li>';
-
-    const countEl = document.querySelector('.sidebar__head .muted');
-    if (countEl) countEl.textContent = `${markets.length} ${markets.length === 1 ? 'market' : 'markets'}`;
+    trackLive(symbols, () => renderDashboardWatchlist(symbols));
+    renderDashboardWatchlist(symbols);
   } catch (err) {
     console.error(err);
     list.innerHTML = '<li class="watch__item"><p class="view-error">Could not load watchlist.</p></li>';
   }
+}
+
+function renderDashboardWatchlist(symbols) {
+  const list = document.querySelector('.watch');
+  if (!list) return;
+
+  const markets = symbols.map(getMarket).filter(Boolean);
+
+  list.innerHTML = markets.length
+    ? markets.map(dashboardItemMarkup).join('')
+    : '<li class="watch__item"><p class="view-empty">No markets yet.</p></li>';
+
+  const countEl = document.querySelector('.sidebar__head .muted');
+  if (countEl) countEl.textContent = `${markets.length} ${markets.length === 1 ? 'market' : 'markets'}`;
 }
 
 /* ---------- Dashboard forecast cards ---------- */
@@ -204,7 +254,6 @@ function lastCloses(market, n = 5) {
     .filter(c => Number.isFinite(c.t) && Number.isFinite(c.close) && c.close > 0)
     .sort((a, b) => a.t - b.t);
 
-  // keep only the latest continuous run (drops stale history mixed into the array)
   let start = rows.length - 1;
   while (start > 0 && rows[start].t - rows[start - 1].t <= SPARK_MAX_GAP_DAYS * 86400000) start--;
 
@@ -245,8 +294,6 @@ function cardMarkup(market) {
   const sparkDir = market.dir === 'none' ? 'flat' : market.dir;
   const sparkPoints = sparkPolyline(market);
 
-  // Same 5 points drawn twice: a normal one in .card__chart (desktop) and a
-  // mini one next to the pill (mobile). CSS shows one and hides the other.
   const sparkSvg = (extra = '') => sparkPoints
     ? `<svg viewBox="0 0 200 56" preserveAspectRatio="none" class="spark spark--${sparkDir} ${extra}" aria-hidden="true">
          <polyline points="${sparkPoints}"/>
@@ -290,18 +337,26 @@ export async function loadDashboardCards() {
 
   try {
     const [symbols] = await Promise.all([fetchWatchlist(), loadLive()]);
-    const markets = symbols.map(getMarket).filter(Boolean);
-
-    if (!markets.length) {
-      container.innerHTML = '<p class="view-empty">Your watchlist is empty. Add a market to see forecasts.</p>';
-      return;
-    }
-
-    container.innerHTML = markets.map(cardMarkup).join('');
+    trackLive(symbols, () => renderDashboardCards(symbols));
+    renderDashboardCards(symbols);
   } catch (err) {
     console.error(err);
     container.innerHTML = '<p class="view-error">Could not load forecasts.</p>';
   }
+}
+
+function renderDashboardCards(symbols) {
+  const container = document.getElementById('dashboard-cards');
+  if (!container) return;
+
+  const markets = symbols.map(getMarket).filter(Boolean);
+
+  if (!markets.length) {
+    container.innerHTML = '<p class="view-empty">Your watchlist is empty. Add a market to see forecasts.</p>';
+    return;
+  }
+
+  container.innerHTML = markets.map(cardMarkup).join('');
 }
 
 /* ---------- Add-market modal ---------- */

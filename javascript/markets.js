@@ -81,21 +81,14 @@ function formatCandleLabel(c, timeframe) {
  * Latest price + change since the last daily close, from the live hourly feed.
  * Only used once the live feed has moved on to a trading day AFTER the last daily close (e.g. Monday's
  * hours while the stored close is Friday's); otherwise the stored daily close / change are shown.
- *
- * The prediction payload exposes the daily close as `date` (the YYYY-MM-DD session the close belongs
- * to) plus `close`. `closeDate` is accepted as a fallback so this keeps working if the upstream
- * document ever starts emitting that name.
  */
 export function liveHeaderPrice(m, live) {
   const candles = live?.candles;
-  const closeDate = m?.closeDate ?? m?.date ?? null;
-  if (!m || !candles?.length || !Number.isFinite(m.close) || !closeDate) return null;
-
+  if (!m || !candles?.length || !Number.isFinite(m.close) || !m.closeDate) return null;
   const last = candles.reduce((a, c) => (toMs(c.time) > toMs(a.time) ? c : a), candles[0]);
   const ms = toMs(last.time);
   if (!Number.isFinite(ms) || !Number.isFinite(last.close) || last.close <= 0) return null;
-  if (tradingDay(ms) <= closeDate) return null;                    // no new session since the daily close
-
+  if (tradingDay(ms) <= m.closeDate) return null;
   const change = (last.close / m.close - 1) * 100;
   const v = Math.round(change * 100) / 100;
   return { price: fmt(last.close), change, changeText: `${v < 0 ? '-' : '+'}${Math.abs(v).toFixed(2)}%` };
@@ -600,14 +593,15 @@ function buildSmcOverlay({ set, candles, isH1, PAD, plotW, plotH, plotRight, bar
       const h = Math.max(yB - yT, 1.5);
       const tip = `${bull ? 'Bullish' : 'Bearish'} ${ZONE_NAME[z.kind] || z.kind} · ` +
         `${fmt(z.bottom)} – ${fmt(z.top)} · touched ${z.touches}× · ${z.age}${unit} old`;
-      const labelY = h >= 12 ? yT + 10 : yT - 2;
-      out.back +=
-        `<g><title>${tip}</title>` +
-        `<rect x="${x0}" y="${yT}" width="${Math.max(plotRight - x0, 1)}" height="${h}" fill="rgba(${rgb},0.10)" ` +
-        `stroke="rgba(${rgb},0.45)" stroke-width="1"${bull ? '' : ' stroke-dasharray="3 3"'}/>` +
-        (z.kind === 'ob' ? `<line x1="${x0}" y1="${yT}" x2="${x0}" y2="${yT + h}" stroke="rgba(${rgb},0.75)" stroke-width="2"/>` : '') +
-        `<text x="${plotRight - 4}" y="${labelY}" text-anchor="end" font-size="9" font-family="${CHART_FONT}" fill="rgba(${rgb},0.9)">${bull ? '▲' : '▼'} ${ZONE_LABEL[z.kind] || z.kind}</text>` +
-        '</g>';
+     // after — label right-aligned inside the plot, just left of the gutter
+          const labelY = h >= 12 ? yT + 10 : yT - 2;
+          out.back +=
+            `<g><title>${tip}</title>` +
+            `<rect x="${x0}" y="${yT}" width="${Math.max(plotRight - x0, 1)}" height="${h}" fill="rgba(${rgb},0.10)" ` +
+            `stroke="rgba(${rgb},0.45)" stroke-width="1"${bull ? '' : ' stroke-dasharray="3 3"'}/>` +
+            (z.kind === 'ob' ? `<line x1="${x0}" y1="${yT}" x2="${x0}" y2="${yT + h}" stroke="rgba(${rgb},0.75)" stroke-width="2"/>` : '') +
+            `<text x="${plotRight - 4}" y="${labelY}" text-anchor="end" font-size="9" font-family="${CHART_FONT}" fill="rgba(${rgb},0.9)">${bull ? '▲' : '▼'} ${ZONE_LABEL[z.kind] || z.kind}</text>` +
+            '</g>';
       out.zones += 1;
     });
   }
@@ -738,14 +732,16 @@ function paintChart() {
       'Check the source CSV for zero, negative or off-scale prices.'
     );
   }
-  const COUNTS = {
-    '1D': { narrow: 20, wide: 50 },
-    '1H': { narrow: 20, wide: 100 },
-  };
-  const n = COUNTS[currentTimeframe][narrow ? 'narrow' : 'wide'];
-  const candles = rows.slice(-n);
+    //  number of candles to show, depending on the timeframe and whether the chart is narrow or wide
+      const COUNTS = {
+        '1D': { narrow: 20, wide: 50 },
+        '1H': { narrow: 20, wide: 100 },
+      };
+      const n = COUNTS[currentTimeframe][narrow ? 'narrow' : 'wide'];
+      const candles = rows.slice(-n);
 
   if (isH1 && candles.length > 1) {
+    // diagnostic: report any missing hour in the visible range (open the browser console to see it)
     const gaps = [];
     for (let i = 1; i < candles.length; i++) {
       const d = (toMs(candles[i].time) - toMs(candles[i - 1].time)) / 3600000;
@@ -773,16 +769,18 @@ function paintChart() {
       (dropped ? ` · ${dropped} bad candle${dropped === 1 ? '' : 's'} hidden` : '');
   }
 
+  // live feed time: own element in the SMC row (the header line is hidden on some phones)
   const liveEl = $('live-note');
   if (liveEl) {
     const u = liveData?.updatedAt;
     liveEl.hidden = !(isH1 && liveData);
-    const shown = u ? new Date(u.getTime() + 3600000) : null;
+    const shown = u ? new Date(u.getTime() + 3600000) : null;  
     liveEl.textContent = shown
       ? `● live ${String(shown.getUTCHours()).padStart(2, '0')}:${String(shown.getUTCMinutes()).padStart(2, '0')} UTC`
       : '● live';
   }
 
+  /* ----- Price range ----- */
   const lastClose = candles[candles.length - 1].close;
   const minP = Math.min(...candles.map((c) => c.low));
   const maxP = Math.max(...candles.map((c) => c.high));
@@ -816,15 +814,19 @@ function paintChart() {
     hi += pad;
   }
 
+  /* ----- Layout in real pixels ----- */
   const { ticks, decimals } = niceTicks(lo, hi, H < 260 ? 4 : 6);
   const fmtTick = (v) =>
     v.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 
   const widest = Math.max(...ticks.map((v) => fmtTick(v).length));
 
+  // ----- Reserve a right-side gutter for the level tags -----
+  // Compute the widest tag ("Entry 25,291.00") so the gutter fits it comfortably.
   const levelTexts = levels.map((l) => `${l.key} ${fmt(l.price)}`);
   const widestLevel = levelTexts.reduce((max, s) => Math.max(max, s.length), 0);
   const levelTagW = widestLevel ? Math.ceil(widestLevel * CHAR_W) + 12 : 0;
+  // Extra breathing room after the tag so it doesn't kiss the SVG edge.
   const rightGutter = widestLevel ? levelTagW + 14 : (narrow ? 8 : 16);
 
   const PAD = {
@@ -845,6 +847,7 @@ function paintChart() {
   let html = '';
   let smcFront = '';
 
+  /* ----- Gridlines + price axis ----- */
   ticks.forEach((price) => {
     const yPix = y(price);
     if (yPix < PAD.top - 1 || yPix > plotBottom + 1) return;
@@ -852,6 +855,7 @@ function paintChart() {
     html += `<text x="${PAD.left - 8}" y="${yPix + 4}" text-anchor="end" fill="#8b95ad" font-size="${CHART_FONT_SIZE}" font-family="${CHART_FONT}">${fmtTick(price)}</text>`;
   });
 
+  /* ----- SMC overlay: zones / lines sit behind the candles ----- */
   if (smcState.on && m?.smc) {
     const ov = buildSmcOverlay({
       set: m.smc[isH1 ? 'h1' : 'daily'], candles, isH1,
@@ -865,6 +869,7 @@ function paintChart() {
     setText('smc-note', parts.length ? parts.join(' · ') : 'Nothing to draw in view');
   }
 
+  /* ----- Candles (now end before the right gutter) ----- */
   candles.forEach((c, i) => {
     const x = PAD.left + i * barW + barW / 2;
     const up = c.close >= c.open;
@@ -880,15 +885,18 @@ function paintChart() {
 
   html += smcFront;
 
+  /* ----- Entry / stop / target ----- */
   const LABEL_H = 16;
   const plotted = levels.map((l) => ({ ...l, y: y(l.price) }));
   const inside = plotted.filter((l) => l.y >= PAD.top - 1 && l.y <= plotBottom + 1);
   const outside = plotted.filter((l) => !inside.includes(l));
 
+  // Dashed lines stop at the right edge of the plot area (NOT over the gutter).
   inside.forEach((l) => {
     html += `<line x1="${PAD.left}" y1="${l.y}" x2="${plotRight}" y2="${l.y}" stroke="${l.color}" stroke-width="1" stroke-dasharray="6 4"/>`;
   });
 
+  // live markers: where the order filled and where it exited
   const st = isH1 ? tradeStatus() : null;
   if (st && t) {
     const at = (time) => candles.findIndex((c) => toMs(c.time) === toMs(time));
@@ -901,6 +909,7 @@ function paintChart() {
     if (st.exit) mark(st.exit.time, st.exit.price, st.state === 'stopped' ? '#ef4444' : '#22c55e', st.state === 'stopped' ? 'Stopped out' : st.state === 'target' ? 'Target reached' : 'Target traded before fill');
   }
 
+  // De-overlap the tag y-positions.
   inside.sort((a, b) => a.y - b.y);
   let prev = -Infinity;
   inside.forEach((l) => {
@@ -914,15 +923,18 @@ function paintChart() {
     }
   }
 
+  // Tags live in the gutter, right-aligned to W - 6 so there is true
+  // right-side breathing room and they never cover the last candle.
   const TAG_RIGHT = W - 6;
   inside.forEach((l) => {
     const text = `${l.key} ${fmt(l.price)}`;
     const w = Math.ceil(text.length * CHAR_W) + 10;
-    const tx = TAG_RIGHT - w;
+    const tx = TAG_RIGHT - w; // left edge of the tag box
     html += `<rect x="${tx}" y="${l.ly - LABEL_H / 2}" width="${w}" height="${LABEL_H}" rx="3" fill="#111a30" fill-opacity="0.95" stroke="${l.color}" stroke-width="1"/>`;
     html += `<text x="${tx + w / 2}" y="${l.ly + 4}" text-anchor="middle" fill="${l.color}" font-size="${CHART_FONT_SIZE}" font-weight="600" font-family="${CHART_FONT}">${text}</text>`;
   });
 
+  // Far-away levels: compact edge markers, also right-aligned in the gutter.
   let above = 0;
   let below = 0;
   outside.forEach((l) => {
@@ -931,6 +943,7 @@ function paintChart() {
     html += `<text x="${TAG_RIGHT}" y="${edgeY}" text-anchor="end" fill="${l.color}" font-size="10" font-weight="600" font-family="${CHART_FONT}">${isAbove ? '▲' : '▼'} ${l.key} ${fmt(l.price)}</text>`;
   });
 
+  /* ----- Date axis ----- */
   const labelCount = Math.min(candles.length, W < 380 ? 2 : narrow ? 3 : 5);
   for (let i = 0; i < labelCount; i++) {
     const idx = labelCount === 1 ? 0 : Math.round((candles.length - 1) * (i / (labelCount - 1)));
@@ -1015,6 +1028,7 @@ function paintSmc(symbol, m) {
     }
   });
 
+  // each signal tag takes its zone colour (zones.css); ▲/▼ still shows direction
   const signalHtml = (item, extra = '') => `
     <div class="signal${extra}">
       <span class="zone-tag" data-zone="${item.zone}">${item.arrow} ${item.label}</span>
@@ -1034,6 +1048,8 @@ export async function initMarketPage() {
   unsubLive?.();
   unsubLive = null;
   liveData = null;
+  // the page is rebuilt with the 1D button active, so the chart must start on 1D too
+  // (this variable outlives the page when you switch markets)
   currentTimeframe = '1D';
   currentMarket = null;
   currentSymbol = null;
@@ -1060,6 +1076,7 @@ export async function initMarketPage() {
     watchChartSize();
     bindTimeframeButtons();
 
+    // hourly candles pushed by the hourly workflow: redraw whenever a new snapshot arrives
     unsubLive = subscribeLiveHourly(symbol, (data) => {
       if (!$('price-chart') || currentSymbol !== symbol) { unsubLive?.(); return; }
       liveData = data;
