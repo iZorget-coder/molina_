@@ -447,7 +447,7 @@
   .page:has(> .market-head) {
     .market-head__title h1 { font-size: 21px; }
     .price { font-size: 20px; }
-    #pred-tag { padding: 12px 16px; font-size: 22px; }
+    #pred-tag { padding: 10px 14px; font-size: 10px; }
     .conf-main__row strong { font-size: 28px; }
     .probs li { grid-template-columns: 112px minmax(0, 1fr) 40px; gap: 8px; }
   }
