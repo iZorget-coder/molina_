@@ -418,7 +418,6 @@
 
   .prediction__head {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
     gap: 16px;
   }
@@ -452,12 +451,6 @@
   .prediction__text p {
     margin-top: 2px;
     font-size: 14px;
-  }
-
-  /* keep the prediction tag from pushing the head row wider than the card */
-  .prediction__head .tag {
-    flex-shrink: 0;
-    max-width: 100%;
   }
 
   .conf-main__row {
@@ -666,6 +659,9 @@
     margin-top: 12px;
   }
 
+  
+
+
   .smc__grid:empty,
   .smc__wide:empty { display: none; }
 
@@ -678,6 +674,35 @@
     border-radius: 10px;
     background: var(--bg-inset);
   }
+
+  .prediction__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  min-width: 0;
+}
+
+.prediction__text {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.prediction__head .tag {
+  flex: 0 0 auto;
+  margin-left: auto;      /* pushes the tag to the right of the head row */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 600px) {
+  .prediction__head .tag {
+    margin-left: 0;
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+}
 
   .signal p {
     font-size: 13px;
@@ -697,13 +722,5 @@
   /* ---------- Narrow desktop / tablet: stack the columns ---------- */
   @media (max-width: 1180px) {
     .grid { grid-template-columns: minmax(0, 1fr); }
-  }
-
-  /* ---------- Phones: shrink the prediction tag so CONSOLIDATION fits ---------- */
-  @media (max-width: 600px) {
-    .prediction__head .tag {
-      padding: 4px 8px;
-      font-size: 12px;
-    }
   }
 }
