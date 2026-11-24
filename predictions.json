@@ -397,9 +397,9 @@
     "bias": "DOWN",
     "confidence": 0.39311610663107255,
     "probabilities": {
-      "UP": 0.383192626123048,
+      "UP": 0.38319262612304805,
       "DOWN": 0.39311610663107255,
-      "CONSOLIDATION": 0.22369126724587934
+      "CONSOLIDATION": 0.2236912672458794
     },
     "signals": [
       "Bull Breaker",
@@ -578,11 +578,11 @@
   },
   "XAUUSD": {
     "bias": "CONSOLIDATION",
-    "confidence": 0.35887740401275187,
+    "confidence": 0.3588774040127521,
     "probabilities": {
-      "UP": 0.30045941214516547,
+      "UP": 0.3004594121451653,
       "DOWN": 0.34066318384208266,
-      "CONSOLIDATION": 0.35887740401275187
+      "CONSOLIDATION": 0.3588774040127521
     },
     "signals": [
       "Bull Breaker",
