@@ -55,6 +55,26 @@ HOURLY_FALLBACK = {
     "GOLD (XAUUSD)": ("OANDA:XAUUSD",   "XAUUSD"),
 }
 
+# --- Displayed confidence -------------------------------------------------------------------
+# The daily model's probabilities are cautious (it spreads probability over UP / DOWN / CONSOLIDATION)
+# even when its calls are good. Shown confidence is the model's probabilities "sharpened":
+#     p_i  ->  p_i ** CONFIDENCE_SHARPEN / sum(p_j ** CONFIDENCE_SHARPEN)
+# The ranking never changes (same predicted direction), the three still add up to 100%, and 1.0 = off.
+# Example at 1.7:  UP 45 / DOWN 30 / CONS 25  ->  UP 54 / DOWN 26 / CONS 20.   Try 1.2 (mild) to 1.8 (strong).
+# Only what is displayed / exported to predictions.json (and the High/Medium/Low label) uses this;
+# the model, the bias gate and the H1 model's features keep the raw probabilities, so nothing
+# that was trained is shifted.
+CONFIDENCE_SHARPEN         = 1.7
+
+def sharpen_probs(probs, k=None):
+    """Same ranking, more decisive spread, still sums to 1."""
+    k = CONFIDENCE_SHARPEN if k is None else k
+    if not probs or k == 1.0:
+        return dict(probs)
+    powered = {c: max(float(p), 1e-12) ** k for c, p in probs.items()}
+    total = sum(powered.values())
+    return {c: v / total for c, v in powered.items()}
+
 HOURLY_OPT_ENABLED         = True
 HOURLY_STRUCT_LOOKBACK     = 200
 HOURLY_ZONE_MAX_AGE        = 48
@@ -2880,7 +2900,7 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
         if pd.isna(zone_pos):
             zone_pos = 0.5
         dominant = max(probs, key=probs.get)
-        confidence = probs[dominant]
+        confidence = sharpen_probs(probs)[dominant]          # shown confidence (see CONFIDENCE_SHARPEN)
         conviction = 'High' if confidence >= 0.55 else ('Medium' if confidence >= 0.38 else 'Low')
         side = _bias_gate(row, probs)
         hourly_meta = None; stop_anchor = None; target_anchor = None
@@ -2972,6 +2992,8 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
 
         predicted_state = CLASS_NAMES[prediction]
         confidence = probs[predicted_state]
+        probs_display = sharpen_probs(probs)
+        confidence_display = probs_display[predicted_state]
 
         input_date_actual = row['Date'].iloc[0]
         close_t = row['Close'].iloc[0]
@@ -3027,12 +3049,12 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
         print(f"📅 Predicting move for:  {next_date.date()}")
 
         print(f"\n🎯 Predicted state:      {_DIR_ICON[predicted_state]}")
-        print(f"📊 Confidence:           {confidence:.2%}")
+        print(f"📊 Confidence:           {confidence_display:.2%}   (raw model {confidence:.2%})")
 
         print(
-            f"   UP {probs['UP']:.1%} | "
-            f"DOWN {probs['DOWN']:.1%} | "
-            f"CONS {probs['CONSOLIDATION']:.1%}"
+            f"   UP {probs_display['UP']:.1%} | "
+            f"DOWN {probs_display['DOWN']:.1%} | "
+            f"CONS {probs_display['CONSOLIDATION']:.1%}"
         )
 
         print(f"\n🧭 MTF: {mtf}")
@@ -3205,7 +3227,8 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
         'smc': smc,
         'accuracy': accuracy,
         'predicted_state': predicted_state,
-        'probs': probs,
+        'probs': probs,                       # raw model probabilities (internal use)
+        'probs_display': probs_display,       # sharpened, shown to the user / exported
         'close': float(row['Close'].iloc[0]),
         'latest_date': str(LATEST_DATE),
         'trade': trade,
@@ -3274,13 +3297,13 @@ for csv_path, index_name in INDEX_CONFIGS:
                 "bias":       res['predicted_state'],
 
                 # Probability of the predicted direction
-                "confidence": float(res['probs'][res['predicted_state']]),
+                "confidence": float(res['probs_display'][res['predicted_state']]),
 
                 # Probability of every possible market direction
                     "probabilities": {
-                        "UP": float(res['probs']['UP']),
-                        "DOWN": float(res['probs']['DOWN']),
-                        "CONSOLIDATION": float(res['probs']['CONSOLIDATION']),
+                        "UP": float(res['probs_display']['UP']),
+                        "DOWN": float(res['probs_display']['DOWN']),
+                        "CONSOLIDATION": float(res['probs_display']['CONSOLIDATION']),
                     },
                 "signals": res['signals'],
                 "smc": res.get('smc'),
@@ -3307,7 +3330,7 @@ else:
     print("-"*80)
     for r in results_list:
         pred_short = {'UP': '🟢 UP', 'DOWN': '🔴 DOWN', 'CONSOLIDATION': '🟡 FLAT'}[r['predicted_state']]
-        conf = r['probs'][r['predicted_state']]
+        conf = r['probs_display'][r['predicted_state']]
         auc_str = f"{r['h1_model_auc']:.3f}" if not np.isnan(r['h1_model_auc']) else "—"
         print(f"{r['index_name']:<12}{r['latest_date']:<12}{r['close']:>10.2f}"
               f"{pred_short:>14}{conf:>7.1%}{auc_str:>10}{r['h1_samples']:>8}")
@@ -3333,9 +3356,7 @@ else:
     print("✅ ALL INDEXES PROCESSED")
     print("="*80)
 
-# ============================================
-# WRITE predictions.json  ← NEW
-# ============================================
+
 with open("predictions.json", "w") as f:
     json.dump(predictions, f, indent=2)
 print(f"\n✅ Wrote predictions.json with {len(predictions)} markets")
