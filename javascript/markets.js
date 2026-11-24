@@ -88,7 +88,7 @@ export function liveHeaderPrice(m, live) {
   const last = candles.reduce((a, c) => (toMs(c.time) > toMs(a.time) ? c : a), candles[0]);
   const ms = toMs(last.time);
   if (!Number.isFinite(ms) || !Number.isFinite(last.close) || last.close <= 0) return null;
-  if (tradingDay(ms) <= m.closeDate) return null;                  // no new session since the daily close
+  if (tradingDay(ms) <= m.closeDate) return null;
   const change = (last.close / m.close - 1) * 100;
   const v = Math.round(change * 100) / 100;
   return { price: fmt(last.close), change, changeText: `${v < 0 ? '-' : '+'}${Math.abs(v).toFixed(2)}%` };
