@@ -78,6 +78,14 @@ function formatCandleLabel(c, timeframe) {
 
 /* ---------- Header ---------- */
 
+const TF_LABEL = { '1D': 'Daily', '1H': 'Hourly', '15m': '15 minute' };
+
+/** "Gold spot / US dollar · Hourly": the second word follows the timeframe tab. */
+function paintSubtitle(symbol) {
+  const sym = symbol ?? currentSymbol ?? selectedSymbol();
+  setText('mk-sub', `${DESCRIPTIONS[sym]} · ${TF_LABEL[currentTimeframe] ?? 'Daily'}`);
+}
+
 /**
  * Latest price + change since the last daily close, from the live hourly feed.
  * Only used once the live feed has moved on to a trading day AFTER the last daily close (e.g. Monday's
@@ -97,7 +105,7 @@ export function liveHeaderPrice(m, live) {
 
 function paintHeader(symbol, m) {
   setText('mk-symbol', symbol);
-  setText('mk-sub', `${DESCRIPTIONS[symbol]} · Daily`);
+  paintSubtitle(symbol);
   const lv = liveHeaderPrice(m, freshestLive());
   const shown = lv ?? (m ? { price: m.price, change: m.change, changeText: m.changeText } : null);
   setText('mk-price', shown ? shown.price : '—');
@@ -1008,6 +1016,7 @@ function bindTimeframeButtons() {
       btn.classList.add('is-active');
       btn.setAttribute('aria-selected', 'true');
       currentTimeframe = btn.dataset.timeframe || '1D';
+      paintSubtitle();
       paintChart();
     });
   });
@@ -1076,7 +1085,7 @@ export async function initMarketPage() {
   currentSymbol = null;
 
   setText('mk-symbol', symbol);
-  setText('mk-sub', `${DESCRIPTIONS[symbol]} · Daily`);
+  paintSubtitle(symbol);
 
   try {
     const live = await fetchLatestPredictions();
