@@ -140,7 +140,7 @@ function normaliseSmcSet(s) {
 
 function normaliseSmc(smc) {
   if (!smc || typeof smc !== 'object') return null;
-  return { daily: normaliseSmcSet(smc.daily), h1: normaliseSmcSet(smc.h1) };
+  return { daily: normaliseSmcSet(smc.daily), h1: normaliseSmcSet(smc.h1), m15: normaliseSmcSet(smc.m15) };
 }
 
 
@@ -291,17 +291,22 @@ function normaliseLive(data, symbol) {
   };
 }
 
-/** Calls onData(liveOrNull) now and after every hourly update. Returns an unsubscribe function. */
-export function subscribeLiveHourly(symbol, onData, onError) {
+function subscribeLive(collectionName, symbol, onData, onError) {
   let stopped = false;
   let unsub = () => {};
   authReady.then(() => {
     if (stopped) return;
     unsub = onSnapshot(
-      doc(db, 'live_hourly', 'latest'),
+      doc(db, collectionName, 'latest'),
       (snap) => onData(snap.exists() ? normaliseLive(snap.data(), symbol) : null),
-      (err) => { console.warn('Live hourly feed unavailable', err); onError?.(err); }
+      (err) => { console.warn(`Live feed unavailable (${collectionName})`, err); onError?.(err); }
     );
   });
   return () => { stopped = true; unsub(); };
 }
+
+/** Calls onData(liveOrNull) now and after every hourly update. Returns an unsubscribe function. */
+export const subscribeLiveHourly = (symbol, onData, onError) => subscribeLive('live_hourly', symbol, onData, onError);
+
+/** Same, for the 15-minute feed (live_fifteen/latest, rewritten every 15 minutes). */
+export const subscribeLiveFifteen = (symbol, onData, onError) => subscribeLive('live_fifteen', symbol, onData, onError);

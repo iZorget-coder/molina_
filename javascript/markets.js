@@ -1,4 +1,4 @@
-import { MARKETS, fetchLatestPredictions, formatLong, subscribeLiveHourly } from './predictions.js';
+import { MARKETS, fetchLatestPredictions, formatLong, subscribeLiveHourly, subscribeLiveFifteen } from './predictions.js';
 import { zoneKey, zoneRgb } from './zones.js';
 
 const STORAGE_KEY = 'molina:market';
@@ -65,10 +65,11 @@ const distance = (symbol, n) =>
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 function formatCandleLabel(c, timeframe) {
-  if (timeframe === '1H') {
+  if (timeframe === '1H' || timeframe === '15m') {
     const d = new Date(c.time);
     if (isNaN(d.getTime())) return c.time || '';
-    return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()} ${String(d.getUTCHours()).padStart(2, '0')}:00`;
+    const mins = timeframe === '15m' ? String(d.getUTCMinutes()).padStart(2, '0') : '00';
+    return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()} ${String(d.getUTCHours()).padStart(2, '0')}:${mins}`;
   }
   if (!c.date) return '';
   const [, mo, day] = c.date.split('-').map(Number);
@@ -97,7 +98,7 @@ export function liveHeaderPrice(m, live) {
 function paintHeader(symbol, m) {
   setText('mk-symbol', symbol);
   setText('mk-sub', `${DESCRIPTIONS[symbol]} · Daily`);
-  const lv = liveHeaderPrice(m, liveData);
+  const lv = liveHeaderPrice(m, freshestLive());
   const shown = lv ?? (m ? { price: m.price, change: m.change, changeText: m.changeText } : null);
   setText('mk-price', shown ? shown.price : '—');
   const priceEl = $('mk-price');
@@ -263,7 +264,7 @@ let lastChartSize = { W: 0, H: 0 };
 
 /** Drop candles that can't be real, then sort and de-duplicate. */
 function cleanCandles(raw, timeframe) {
-  const keyOf = (c) => (timeframe === '1H' ? c.time : c.date);
+  const keyOf = (c) => (timeframe === '1D' ? c.date : c.time);
 
   const parsed = (Array.isArray(raw) ? raw : []).map((c) => ({
     ...c,
@@ -277,7 +278,7 @@ function cleanCandles(raw, timeframe) {
   //    array can't skew the axis or the median check below
   const t = (c) => Date.parse(keyOf(c));
   const sorted = parsed.filter((c) => Number.isFinite(t(c))).sort((a, b) => t(a) - t(b));
-  const maxGap = (timeframe === '1H' ? 5 : 14) * 86400000;
+  const maxGap = (timeframe === '1D' ? 14 : 5) * 86400000;
   let s = sorted.length - 1;
   while (s > 0 && t(sorted[s]) - t(sorted[s - 1]) <= maxGap) s--;
   const recent = sorted.slice(s);
@@ -344,8 +345,10 @@ function niceTicks(lo, hi, target) {
    the limit order has filled, hit its stop or reached its target.
    ========================================================== */
 
-let liveData = null;          // { candles, source, updatedAt } for the open market, or null
+let liveData = null;          // hourly feed { candles, source, updatedAt } for the open market, or null
+let liveFifteen = null;       // 15-minute feed, same shape, or null
 let unsubLive = null;
+let unsubFifteen = null;
 let forecastDayIso = null;
 
 /** Stored 1H candles + live candles, one entry per hour (live wins), times as ISO strings. */
@@ -358,6 +361,12 @@ function mergeLive(raw, live) {
   (Array.isArray(raw) ? raw : []).forEach((c) => put(c, false));
   (live?.candles || []).forEach((c) => put(c, true));
   return [...byMs.values()];
+}
+
+/** The live feed whose newest candle is the most recent (15-minute normally beats hourly). */
+function freshestLive() {
+  const newest = (f) => (f?.candles?.length ? Math.max(...f.candles.map((c) => toMs(c.time)).filter(Number.isFinite)) : -Infinity);
+  return newest(liveFifteen) >= newest(liveData) ? (liveFifteen || liveData) : liveData;
 }
 
 /** Trading day of an hour (futures reopen ~22:00-23:00 UTC, so +2h puts that open on the next day). */
@@ -436,11 +445,15 @@ export const dropWeekendDays = (arr) =>
     return dow !== 0 && dow !== 6;
   });
 
-/** Cleaned candles for a timeframe, with the live feed merged in. */
-function chartRows(m, isH1) {
-  if (!isH1) {
+/** Cleaned candles for a timeframe ('1D' | '1H' | '15m'), with the live feeds merged in. */
+function chartRows(m, tf) {
+  if (tf === '1D') {
     const daily = liveData ? mergeDaily(m?.candles, liveData) : m?.candles;
     return cleanCandles(dropWeekendDays(daily), '1D');
+  }
+  if (tf === '15m') {
+    // there are no stored 15-minute candles: the chart is the live_fifteen feed
+    return cleanCandles(mergeLive([], liveFifteen), '15m');
   }
   return cleanCandles(liveData ? mergeLive(m?.candlesH1, liveData) : m?.candlesH1, '1H');
 }
@@ -485,8 +498,9 @@ export function evaluateTrade(t, rows, fromMs) {
 
 function tradeStatus() {
   const t = currentMarket?.trade;
-  if (!liveData || !t || !forecastDayIso) return null;
-  const { rows } = chartRows(currentMarket, true);
+  if ((!liveData && !liveFifteen) || !t || !forecastDayIso) return null;
+  // 15-minute candles give the most precise fill / stop / target check; hourly is the fallback
+  const { rows } = chartRows(currentMarket, liveFifteen ? '15m' : '1H');
   return evaluateTrade(t, rows, Date.parse(`${forecastDayIso}T00:00:00Z`));
 }
 
@@ -558,7 +572,7 @@ const toMs = (v) => {
 };
 
 /** Build the SVG for the overlay. `back` goes under the candles, `front` over them. */
-function buildSmcOverlay({ set, candles, isH1, PAD, plotW, plotH, plotRight, barW, y, lo, hi, layers }) {
+function buildSmcOverlay({ set, candles, isH1, ageUnit, PAD, plotW, plotH, plotRight, barW, y, lo, hi, layers }) {
   const out = { back: '', front: '', zones: 0, levels: 0 };
   if (!set || !candles.length) return out;
 
@@ -576,7 +590,7 @@ function buildSmcOverlay({ set, candles, isH1, PAD, plotW, plotH, plotRight, bar
   const xl = (i) => PAD.left + i * barW;
   const xc = (i) => PAD.left + i * barW + barW / 2;
   const inView = (a, b) => b >= lo && a <= hi;
-  const unit = isH1 ? 'h' : 'd';
+  const unit = ageUnit ?? (isH1 ? 'h' : 'd');
 
   out.back += `<defs><clipPath id="smc-clip"><rect x="${PAD.left}" y="${PAD.top}" width="${plotW}" height="${plotH}"/></clipPath></defs><g clip-path="url(#smc-clip)">`;
 
@@ -722,9 +736,12 @@ function paintChart() {
 
   const narrow = W < 520;
   const m = currentMarket;
-  const isH1 = currentTimeframe === '1H';
+  const tf = currentTimeframe;
+  const isH1 = tf !== '1D';                     // intraday (1H or 15m): candles are keyed by time
+  const tfName = tf === '15m' ? '15-minute' : tf === '1H' ? 'hourly' : 'daily';
+  const activeLive = tf === '15m' ? liveFifteen : tf === '1H' ? liveData : null;
 
-  const { rows, dropped } = chartRows(m, isH1);
+  const { rows, dropped } = chartRows(m, tf);
 
   if (dropped > 0) {
     console.warn(
@@ -734,13 +751,14 @@ function paintChart() {
   }
     //  number of candles to show, depending on the timeframe and whether the chart is narrow or wide
       const COUNTS = {
-        '1D': { narrow: 20, wide: 50 },
-        '1H': { narrow: 20, wide: 100 },
+        '1D':  { narrow: 20, wide: 50 },
+        '1H':  { narrow: 20, wide: 100 },
+        '15m': { narrow: 24, wide: 96 },
       };
       const n = COUNTS[currentTimeframe][narrow ? 'narrow' : 'wide'];
       const candles = rows.slice(-n);
 
-  if (isH1 && candles.length > 1) {
+  if (tf === '1H' && candles.length > 1) {
     // diagnostic: report any missing hour in the visible range (open the browser console to see it)
     const gaps = [];
     for (let i = 1; i < candles.length; i++) {
@@ -752,11 +770,11 @@ function paintChart() {
   }
 
   if (titleEl) {
-    titleEl.textContent = `Price, ${candles.length} ${isH1 ? 'hourly' : 'daily'} candles`;
+    titleEl.textContent = `Price, ${candles.length} ${tfName} candles`;
   }
 
   if (!candles.length) {
-    svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" fill="#8b95ad" font-size="14" font-family="${CHART_FONT}">No ${isH1 ? 'hourly' : 'daily'} data</text>`;
+    svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" fill="#8b95ad" font-size="14" font-family="${CHART_FONT}">${tf === '15m' ? 'Waiting for live 15-minute data' : `No ${tfName} data`}</text>`;
     if (lastDateEl) lastDateEl.textContent = '';
     if ($('live-note')) $('live-note').hidden = true;
     return;
@@ -772,8 +790,8 @@ function paintChart() {
   // live feed time: own element in the SMC row (the header line is hidden on some phones)
   const liveEl = $('live-note');
   if (liveEl) {
-    const u = liveData?.updatedAt;
-    liveEl.hidden = !(isH1 && liveData);
+    const u = activeLive?.updatedAt;
+    liveEl.hidden = !(isH1 && activeLive);
     const shown = u ? new Date(u.getTime() + 3600000) : null;  
     liveEl.textContent = shown
       ? `● live ${String(shown.getUTCHours()).padStart(2, '0')}:${String(shown.getUTCMinutes()).padStart(2, '0')} UTC`
@@ -858,7 +876,7 @@ function paintChart() {
   /* ----- SMC overlay: zones / lines sit behind the candles ----- */
   if (smcState.on && m?.smc) {
     const ov = buildSmcOverlay({
-      set: m.smc[isH1 ? 'h1' : 'daily'], candles, isH1,
+      set: m.smc[tf === '15m' ? 'm15' : isH1 ? 'h1' : 'daily'] ?? (tf === '15m' ? m.smc.h1 : null), candles, isH1, ageUnit: tf === '15m' ? '×15m' : undefined,
       PAD, plotW, plotH, plotRight, barW, y, lo, hi, layers: smcState.layers,
     });
     html += ov.back;
@@ -1047,7 +1065,10 @@ export async function initMarketPage() {
   loadSmcState();
   unsubLive?.();
   unsubLive = null;
+  unsubFifteen?.();
+  unsubFifteen = null;
   liveData = null;
+  liveFifteen = null;
   // the page is rebuilt with the 1D button active, so the chart must start on 1D too
   // (this variable outlives the page when you switch markets)
   currentTimeframe = '1D';
@@ -1080,6 +1101,15 @@ export async function initMarketPage() {
     unsubLive = subscribeLiveHourly(symbol, (data) => {
       if (!$('price-chart') || currentSymbol !== symbol) { unsubLive?.(); return; }
       liveData = data;
+      paintHeader(symbol, currentMarket);
+      paintTradeStatus();
+      paintChart();
+    });
+
+    // 15-minute candles (live_fifteen), pushed by the 15-minute workflow
+    unsubFifteen = subscribeLiveFifteen(symbol, (data) => {
+      if (!$('price-chart') || currentSymbol !== symbol) { unsubFifteen?.(); return; }
+      liveFifteen = data;
       paintHeader(symbol, currentMarket);
       paintTradeStatus();
       paintChart();

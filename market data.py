@@ -75,6 +75,14 @@ def sharpen_probs(probs, k=None):
     total = sum(powered.values())
     return {c: v / total for c, v in powered.items()}
 
+# 15-minute data (same markets, same UTC timestamps as the hourly CSVs)
+M15_CONFIGS = {
+    "S&P 500":       "SP500_15m.csv",
+    "NASDAQ":        "NASDAQ100_15m.csv",
+    "DOW JONES":     "DOW_15m.csv",
+    "GOLD (XAUUSD)": "XAUUSD_15m.csv",
+}
+
 HOURLY_OPT_ENABLED         = True
 HOURLY_STRUCT_LOOKBACK     = 200
 HOURLY_ZONE_MAX_AGE        = 48
@@ -179,6 +187,40 @@ FEATURE_COLUMNS = (
 )
 COL = {c: i for i, c in enumerate(FEATURE_COLUMNS)}
 
+# --------------------------------------------------------------------------------------------
+# 15-MINUTE MODEL  (same machinery as the H1 model, profile = the numbers below)
+# The 15m model also sees the 1-hour chart: is the entry inside / near a valid H1 zone, which H1
+# zone type it is, the H1 trend / structure, and how far the nearest opposing H1 zone is. So the
+# 15m entry is judged against both timeframes, and live the better of the two models' picks wins.
+# --------------------------------------------------------------------------------------------
+M15_MODEL_ENABLED = True
+M15_MIN_BARS      = 1500        # need at least this many 15m bars to attempt the 15m model
+M15_SWITCH_MARGIN = 0.03        # 15m pick must beat the H1 pick's EV by this (R) to be used live
+H1CTX_COLUMNS = ["h1_in_zone", "h1_zone_dist_atr", "h1_zone_n_near", "h1_zone_age", "h1_zone_width_atr",
+                 "h1_k_fvg", "h1_k_ob", "h1_k_ifvg", "h1_k_breaker", "h1_k_sweep",
+                 "h1_trend_aligned", "h1_bos_aligned", "h1_opp_dist_r", "h1_atr_ratio"]
+M15_FEATURE_COLUMNS = FEATURE_COLUMNS + H1CTX_COLUMNS
+
+H1_CFG = {"tf": "H1", "unit": "H1 bars", "zone_max_age": ZONE_MAX_AGE, "swing_lb": SWING_LOOKBACK,
+          "valid": VALID_BARS, "hold": HOLD_BARS, "warmup": WARMUP, "sample_every": SAMPLE_EVERY,
+          "min_rows": MIN_ROWS, "min_val_groups": MIN_VAL_GROUPS, "min_fills": 300, "leaf": 40,
+          "stop_buf": STOP_BUF_ATR, "cols": FEATURE_COLUMNS,
+          "w_range": 48, "mom_a": 3, "mom_b": 12, "w_recent": 12,
+          "relax": [(MAX_ENTRY_DIST_ATR, MIN_RISK_ATR, MAX_RISK_ATR, MIN_RR, MAX_RR),
+                    (3.0, 0.35, 3.5, 0.8, 6.0), (6.0, 0.30, 4.5, 0.5, 10.0)]}
+
+M15_CFG = {"tf": "M15", "unit": "15m bars", "zone_max_age": 320, "swing_lb": 192,       # ~3.3 days / 2 days
+           "valid": 16, "hold": 32,                                                     # 4h to fill, 8h to resolve
+           "warmup": 200, "sample_every": 4,
+           "min_rows": 1200, "min_val_groups": 120, "min_fills": 200, "leaf": 30,
+           "stop_buf": 0.50, "cols": M15_FEATURE_COLUMNS,                               # more breathing room
+           "w_range": 96, "mom_a": 4, "mom_b": 16, "w_recent": 16,
+           "relax": [(2.0, 0.6, 3.0, 1.0, 4.0), (4.0, 0.5, 4.0, 0.8, 6.0), (8.0, 0.4, 5.0, 0.5, 10.0)]}
+
+
+def _cfg(P: dict) -> dict:
+    return P.get("cfg", H1_CFG)
+
 
 def _sess(hr: int) -> str:
     if 0 <= hr < 7:
@@ -193,7 +235,7 @@ def _sess(hr: int) -> str:
 # ============================================
 # H1 PREP: swings, structure, causal zones
 # ============================================
-def _prep_core(h: pd.DataFrame, hour, date, max_age: int, label: str) -> dict:
+def _prep_core(h: pd.DataFrame, hour, date, max_age: int, label: str, cfg: dict = None) -> dict:
     t0 = time.time()
     o = h["open"].to_numpy(float); hi = h["high"].to_numpy(float)
     lo = h["low"].to_numpy(float); c = h["close"].to_numpy(float)
@@ -206,7 +248,7 @@ def _prep_core(h: pd.DataFrame, hour, date, max_age: int, label: str) -> dict:
     disp = np.abs(body) > 1.5 * np.nan_to_num(avg_body, nan=np.inf)
     P = {"n": n, "o": o, "h": hi, "l": lo, "c": c, "atr": atr, "body": body,
          "avg_body": avg_body, "disp": disp,
-         "hour": hour, "date": date}
+         "hour": hour, "date": date, "cfg": cfg or H1_CFG}
 
     sh, sl = [], []
     for i in range(SWING_LEFT, n - SWING_RIGHT):
@@ -230,6 +272,21 @@ def prep_hourly(h: pd.DataFrame) -> dict:
     return _prep_core(h, h["hour_utc"].to_numpy(int),
                       h["timestamp"].dt.tz_convert(None).to_numpy().astype("datetime64[D]"),
                       ZONE_MAX_AGE, "H1")
+
+
+def prep_m15(m: pd.DataFrame, h1_P: dict = None, h1_df: pd.DataFrame = None) -> dict:
+    """15-minute prep + a causal map from every 15m bar to the last COMPLETED H1 bar (for H1 context)."""
+    P = _prep_core(m, m["hour_utc"].to_numpy(int),
+                   m["timestamp"].dt.tz_convert(None).to_numpy().astype("datetime64[D]"),
+                   M15_CFG["zone_max_age"], "M15", cfg=M15_CFG)
+    if h1_P is not None and h1_df is not None and len(h1_df):
+        h1_end = (h1_df["timestamp"].dt.tz_convert(None).to_numpy().astype("datetime64[ns]")
+                  + np.timedelta64(1, "h"))
+        m_end = (m["timestamp"].dt.tz_convert(None).to_numpy().astype("datetime64[ns]")
+                 + np.timedelta64(15, "m"))
+        P["h1P"] = h1_P
+        P["h1_map"] = np.searchsorted(h1_end, m_end, side="right") - 1      # last H1 bar closed by then
+    return P
 
 
 def prep_daily(d: pd.DataFrame) -> dict:
@@ -349,7 +406,7 @@ def _live_swings(P: dict, t: int, kind: str) -> list:
     """Confirmed, still-unbroken swings as of bar t. kind: 'sh' or 'sl'."""
     idx, px, conf = P[kind + "_idx"], P[kind + "_px"], P[kind + "_conf"]
     arr = P["h"] if kind == "sh" else P["l"]
-    a = np.searchsorted(idx, t - SWING_LOOKBACK, side="left")
+    a = np.searchsorted(idx, t - _cfg(P)["swing_lb"], side="left")
     b = np.searchsorted(conf, t, side="right")
     out = []
     for k in range(a, b):
@@ -528,8 +585,68 @@ def oof_daily_probs(daily_df: pd.DataFrame, feature_columns: list, n_splits: int
 # ============================================
 # CANDIDATE GENERATION
 # ============================================
+def _h1_zone_ctx(P: dict, t: int, side: str):
+    """H1 zones (valid, causal) as seen from 15m bar t, split into with-trade / opposing."""
+    hP = P.get("h1P")
+    if hP is None:
+        return None
+    memo = P.setdefault("_h1memo", {})
+    key = (t, side)
+    if key in memo:
+        return memo[key]
+    out = None
+    j = int(P["h1_map"][t])
+    if j >= 0 and float(hP["atr"][j]) > 0:
+        long = side == "LONG"
+        al, op = [], []
+        for k in range(max(0, j - ZONE_MAX_AGE), j + 1):
+            for z in hP["Z"].get(k, ()):
+                if z["inv"] is not None and z["inv"] <= j:
+                    continue
+                info = {"kind": z["kind"], "top": z["top"], "bottom": z["bottom"], "age": j - z["known"]}
+                (al if (z["dir"] == "bull") == long else op).append(info)
+        sg = 1.0 if long else -1.0
+        out = {"al": al, "op": op, "atr": float(hP["atr"][j]),
+               "trend": sg * float(hP["trend"][j]), "bos": sg * float(hP["bos_dir"][j])}
+    memo[key] = out
+    return out
+
+
+def _h1_feats(P, t, side, E, S, ctx) -> dict:
+    f = {k: 0.0 for k in H1CTX_COLUMNS}
+    f["h1_zone_dist_atr"] = 5.0; f["h1_opp_dist_r"] = 10.0; f["h1_atr_ratio"] = 1.0
+    hc = ctx.get("h1")
+    if not hc:
+        return f
+    a = hc["atr"]
+    near = None; n_near = 0
+    for z in hc["al"]:
+        d = max(z["bottom"] - E, E - z["top"], 0.0) / a
+        if d <= 0.5:
+            n_near += 1
+        if near is None or (d, z["age"]) < (near[0], near[1]["age"]):
+            near = (d, z)
+    if near is not None:
+        d, z = near
+        f["h1_zone_dist_atr"] = min(d, 5.0); f["h1_in_zone"] = float(d <= 0.02)
+        f["h1_zone_n_near"] = float(n_near); f["h1_zone_age"] = float(min(z["age"], ZONE_MAX_AGE))
+        f["h1_zone_width_atr"] = (z["top"] - z["bottom"]) / a
+        if "h1_k_" + z["kind"] in f:
+            f["h1_k_" + z["kind"]] = 1.0
+    risk = abs(E - S)
+    gaps = [(oz["bottom"] - E) if side == "LONG" else (E - oz["top"]) for oz in hc["op"]]
+    gaps = [g for g in gaps if g > 0]
+    if gaps and risk > 0:
+        f["h1_opp_dist_r"] = min(min(gaps) / risk, 10.0)
+    f["h1_trend_aligned"] = hc["trend"]; f["h1_bos_aligned"] = hc["bos"]
+    m_atr = float(P["atr"][t])
+    f["h1_atr_ratio"] = min(a / m_atr, 20.0) if m_atr > 0 else 1.0
+    return f
+
+
 def _features(P, t, side, z, E, S, T, rr, e_frac, s_style, rank, is_eq, ctx, confl):
     sg = 1.0 if side == "LONG" else -1.0
+    cfg = _cfg(P)
     c, atr = P["c"], P["atr"][t]
     c_t = c[t]; hr = int(P["hour"][t])
     f = {}
@@ -552,13 +669,14 @@ def _features(P, t, side, z, E, S, T, rr, e_frac, s_style, rank, is_eq, ctx, con
     f["rr"] = rr; f["target_eq"] = float(is_eq)
     f["trend_aligned"] = sg * P["trend"][t]; f["bos_aligned"] = sg * P["bos_dir"][t]
     f["bars_since_bos"] = float(min(P["since"][t], 100))
-    w0 = max(0, t - 47)
+    w0 = max(0, t - cfg["w_range"] + 1)
     lo48, hi48 = P["l"][w0:t + 1].min(), P["h"][w0:t + 1].max()
     rng = hi48 - lo48
     rp = float(np.clip((E - lo48) / rng, 0, 1)) if rng > 0 else 0.5
     f["range_pos"] = rp if side == "LONG" else 1.0 - rp      # 0 = favourable (discount for longs / premium for shorts)
-    f["mom3"] = sg * (c_t - c[t - 3]) / atr; f["mom12"] = sg * (c_t - c[t - 12]) / atr
-    f["recent_range_atr"] = (P["h"][t - 11:t + 1].max() - P["l"][t - 11:t + 1].min()) / atr
+    f["mom3"] = sg * (c_t - c[t - cfg["mom_a"]]) / atr; f["mom12"] = sg * (c_t - c[t - cfg["mom_b"]]) / atr
+    wr = cfg["w_recent"]
+    f["recent_range_atr"] = (P["h"][t - wr + 1:t + 1].max() - P["l"][t - wr + 1:t + 1].min()) / atr
     f["atr_pct"] = atr / c_t * 100; f["side_sign"] = sg
     f["prob_up"] = ctx["prob_up"]; f["prob_down"] = ctx["prob_down"]; f["prob_cons"] = ctx["prob_cons"]
     f["macro_aligned"] = sg * ctx["macro"]
@@ -602,7 +720,9 @@ def _features(P, t, side, z, E, S, T, rr, e_frac, s_style, rank, is_eq, ctx, con
         gaps = [g for g in gaps if g > 0]
         if gaps and risk > 0:
             f["dz_opp_dist_r"] = min(min(gaps) / risk, 10.0)
-    return np.nan_to_num(np.array([f[k] for k in FEATURE_COLUMNS], dtype=float))
+    if "h1_in_zone" in cfg["cols"]:
+        f.update(_h1_feats(P, t, side, E, S, ctx))
+    return np.nan_to_num(np.array([f[k] for k in cfg["cols"]], dtype=float))
 
 
 RELAX = [   # (max_entry_dist, min_risk, max_risk, min_rr, max_rr) -- tried in order until a candidate exists
@@ -613,13 +733,16 @@ RELAX = [   # (max_entry_dist, min_risk, max_risk, min_rr, max_rr) -- tried in o
 
 
 def _candidates(P: dict, t: int, side: str, ctx: dict, level: int = 0) -> list:
-    max_dist, min_risk, max_risk, min_rr, max_rr = RELAX[level]
+    cfg = _cfg(P)
+    max_dist, min_risk, max_risk, min_rr, max_rr = cfg["relax"][level]
     long = side == "LONG"
     c_t, atr = P["c"][t], P["atr"][t]
     if not (atr > 0 and c_t > 0):
         return []
+    if "h1P" in P:                                          # 15m model: add the H1 view of the chart
+        ctx = {**ctx, "h1": _h1_zone_ctx(P, t, side)}
     pool = []
-    for k in range(max(0, t - ZONE_MAX_AGE), t + 1):
+    for k in range(max(0, t - cfg["zone_max_age"]), t + 1):
         for z in P["Z"].get(k, ()):
             if (z["dir"] == "bull") != long:
                 continue
@@ -652,11 +775,12 @@ def _candidates(P: dict, t: int, side: str, ctx: dict, level: int = 0) -> list:
             seen.add(key)
             confl = sum(1 for _, _, z2 in pool if z2 is not z and
                         z2["bottom"] - 0.25 * atr <= E <= z2["top"] + 0.25 * atr)
-            stops = [("zone", z["bottom"] - STOP_BUF_ATR * atr if long else z["top"] + STOP_BUF_ATR * atr)]
+            sbuf = cfg["stop_buf"]
+            stops = [("zone", z["bottom"] - sbuf * atr if long else z["top"] + sbuf * atr)]
             sw = [(i, p) for i, p in stop_sw if (p < E - 0.1 * atr if long else p > E + 0.1 * atr)]
             if sw:
                 _, p_ = max(sw, key=lambda x: x[0])        # most recent swing beyond entry
-                S2 = p_ - STOP_BUF_ATR * atr if long else p_ + STOP_BUF_ATR * atr
+                S2 = p_ - sbuf * atr if long else p_ + sbuf * atr
                 if abs(S2 - stops[0][1]) > 0.1 * atr:
                     stops.append(("swing", S2))
             for s_style, S in stops:
@@ -691,8 +815,9 @@ def _simulate(P: dict, t: int, side: str, E: float, S: float, T: float):
     """Returns (filled, R) or None if there isn't enough data to resolve."""
     long = side == "LONG"
     hi, lo, c, n = P["h"], P["l"], P["c"], P["n"]
-    end_fill = t + VALID_BARS
-    if end_fill + HOLD_BARS + 1 >= n:
+    VALID, HOLD = _cfg(P)["valid"], _cfg(P)["hold"]
+    end_fill = t + VALID
+    if end_fill + HOLD + 1 >= n:
         return None
     risk = abs(E - S); rr = abs(T - E) / risk
     s_lo, s_hi = lo[t + 1:end_fill + 1], hi[t + 1:end_fill + 1]
@@ -704,7 +829,7 @@ def _simulate(P: dict, t: int, side: str, E: float, S: float, T: float):
     if pre.any():                                   # target traded before entry -> setup is gone
         return 0.0, np.nan
     f = t + 1 + fj
-    w_lo, w_hi = lo[f:f + HOLD_BARS + 1], hi[f:f + HOLD_BARS + 1]
+    w_lo, w_hi = lo[f:f + HOLD + 1], hi[f:f + HOLD + 1]
     stop_hit = w_lo <= S if long else w_hi >= S
     tgt_hit = w_hi >= T if long else w_lo <= T
     tgt_hit[0] = False                              # can't credit the target on the fill bar
@@ -714,7 +839,7 @@ def _simulate(P: dict, t: int, side: str, E: float, S: float, T: float):
         return 1.0, -1.0                            # stop wins ties
     if ft < 10 ** 9:
         return 1.0, float(rr)
-    exit_px = c[f + HOLD_BARS]
+    exit_px = c[f + HOLD]
     r = ((exit_px - E) if long else (E - exit_px)) / risk
     return 1.0, float(np.clip(r, -1.0, rr))
 
@@ -722,12 +847,14 @@ def _simulate(P: dict, t: int, side: str, E: float, S: float, T: float):
 # ============================================
 # TRAINING SET + MODEL
 # ============================================
-def build_training_set(P, B, probs, index_name, dP=None, sample_every=SAMPLE_EVERY) -> pd.DataFrame:
+def build_training_set(P, B, probs, index_name, dP=None, sample_every=None) -> pd.DataFrame:
     t0 = time.time()
+    cfg = _cfg(P)
+    sample_every = sample_every or cfg["sample_every"]
     n = P["n"]
     d_idx = np.searchsorted(B["dates"], P["date"], side="left") - 1   # last COMPLETED daily bar
     chunks = []
-    for t in range(WARMUP, n - VALID_BARS - HOLD_BARS - 2, sample_every):
+    for t in range(cfg["warmup"], n - cfg["valid"] - cfg["hold"] - 2, sample_every):
         di = d_idx[t]
         if di < 0 or np.isnan(probs[di]).any():
             continue
@@ -743,10 +870,10 @@ def build_training_set(P, B, probs, index_name, dP=None, sample_every=SAMPLE_EVE
         if local:
             chunks.append(np.vstack(local).astype(np.float32))
     if not chunks:
-        print(f"   ⚠️  [{index_name}] no H1 candidates generated")
+        print(f"   ⚠️  [{index_name}] no {cfg['tf']} candidates generated")
         return pd.DataFrame()
     arr = np.vstack(chunks)
-    df = pd.DataFrame(arr, columns=FEATURE_COLUMNS + ["fill", "r", "_at_idx"])
+    df = pd.DataFrame(arr, columns=list(cfg["cols"]) + ["fill", "r", "_at_idx"])
     f = df[df["fill"] == 1]
     print(f"   [{index_name}] {len(df)} simulated candidates over {df['_at_idx'].nunique()} bars "
           f"({time.time() - t0:.1f}s)")
@@ -757,13 +884,15 @@ def build_training_set(P, B, probs, index_name, dP=None, sample_every=SAMPLE_EVE
     return df
 
 
-def _fit(tr: pd.DataFrame):
-    X = tr[FEATURE_COLUMNS]
-    clf = RandomForestClassifier(n_estimators=250, max_depth=8, min_samples_leaf=40,
+def _fit(tr: pd.DataFrame, cfg: dict = None):
+    cfg = cfg or H1_CFG
+    cols = list(cfg["cols"])
+    X = tr[cols]
+    clf = RandomForestClassifier(n_estimators=250, max_depth=8, min_samples_leaf=cfg["leaf"],
                                  max_features=0.5, random_state=42, n_jobs=-1).fit(X, tr["fill"])
     f = tr[tr["fill"] == 1]
-    reg = RandomForestRegressor(n_estimators=250, max_depth=8, min_samples_leaf=40,
-                                max_features=0.5, random_state=42, n_jobs=-1).fit(f[FEATURE_COLUMNS], f["r"])
+    reg = RandomForestRegressor(n_estimators=250, max_depth=8, min_samples_leaf=cfg["leaf"],
+                                max_features=0.5, random_state=42, n_jobs=-1).fit(f[cols], f["r"])
     return clf, reg
 
 
@@ -773,26 +902,29 @@ def _ev(clf, reg, X) -> np.ndarray:
     return p_fill * reg.predict(X), p_fill
 
 
-def train_model(df: pd.DataFrame, index_name: str) -> dict:
+def train_model(df: pd.DataFrame, index_name: str, cfg: dict = None) -> dict:
+    cfg = cfg or H1_CFG
+    tf, cols = cfg["tf"], list(cfg["cols"])
     n = len(df)
-    if n < MIN_ROWS:
-        print(f"   ⚠️  H1 model skipped — only {n} candidates (need {MIN_ROWS})")
+    if n < cfg["min_rows"]:
+        print(f"   ⚠️  {tf} model skipped — only {n} candidates (need {cfg['min_rows']})")
         return {"accepted": False, "n": n, "auc": float("nan"), "reason": f"only {n} rows"}
     df = df.sort_values("_at_idx").reset_index(drop=True)
     at = df["_at_idx"].to_numpy()
     cut = np.quantile(np.unique(at), TRAIN_FRACTION)
-    tr = df[at <= cut - (VALID_BARS + HOLD_BARS + 1)]        # embargo so trades can't overlap the split
+    tr = df[at <= cut - (cfg["valid"] + cfg["hold"] + 1)]    # embargo so trades can't overlap the split
     va = df[at > cut]
-    if va["_at_idx"].nunique() < MIN_VAL_GROUPS or len(tr[tr["fill"] == 1]) < 300:
+    if va["_at_idx"].nunique() < cfg["min_val_groups"] or len(tr[tr["fill"] == 1]) < cfg["min_fills"]:
+        print(f"   ⚠️  {tf} model skipped — not enough data per split")
         return {"accepted": False, "n": n, "auc": float("nan"), "reason": "not enough data per split"}
-    clf, reg = _fit(tr)
-    ev, p_fill = _ev(clf, reg, va[FEATURE_COLUMNS])
+    clf, reg = _fit(tr, cfg)
+    ev, p_fill = _ev(clf, reg, va[cols])
     realized = (va["fill"] * va["r"].fillna(0.0)).to_numpy()
     tmp = pd.DataFrame({"g": va["_at_idx"].to_numpy(), "ev": ev, "pf": p_fill, "real": realized})
     picked = tmp.loc[tmp.groupby("g")["ev"].idxmax()]
     base = float(tmp.groupby("g")["real"].mean().mean())
     sel = float(picked["real"].mean())
-    print(f"   H1 model [{index_name}] hold-out: {len(picked)} bars | avg-candidate {base:+.3f}R "
+    print(f"   {tf} model [{index_name}] hold-out: {len(picked)} bars | avg-candidate {base:+.3f}R "
           f"| model-picked {sel:+.3f}R per bar (unfilled = 0R)")
     for thr in (0.0, 0.05, 0.10, 0.20):
         m = picked["ev"] >= thr
@@ -800,10 +932,10 @@ def train_model(df: pd.DataFrame, index_name: str) -> dict:
             print(f"      EV >= {thr:.2f}: {int(m.sum()):>5} bars | realized {picked.loc[m, 'real'].mean():+.3f}R")
     accepted = sel > 0 and sel >= base + MIN_EDGE_R
     if not accepted:
-        print(f"   ⚠️  H1 model rejected (edge {sel - base:+.3f}R < {MIN_EDGE_R}) — heuristic fallback")
+        print(f"   ⚠️  {tf} model rejected (edge {sel - base:+.3f}R < {MIN_EDGE_R}) — heuristic fallback")
         return {"accepted": False, "n": n, "auc": float("nan"), "reason": f"edge {sel - base:+.3f}R"}
-    clf, reg = _fit(df)
-    imp = pd.Series(reg.feature_importances_, index=FEATURE_COLUMNS).sort_values(ascending=False)
+    clf, reg = _fit(df, cfg)
+    imp = pd.Series(reg.feature_importances_, index=cols).sort_values(ascending=False)
     print("      Top 10 features (E[R] model):")
     print(imp.head(10).to_string())
     return {"accepted": True, "fill": clf, "r": reg, "n": n, "auc": float("nan"),
@@ -817,11 +949,12 @@ def _fallback_candidate(P: dict, t: int, side: str):
     """Last resort when no zone x swing-target combo exists: nearest bias-direction zone (or the
     current price) with a recent-swing stop and a swing / 1.5R target. Never returns None."""
     long = side == "LONG"
+    cfg = _cfg(P); tf = cfg["tf"]
     c_t, atr = float(P["c"][t]), float(P["atr"][t])
     if not atr > 0:
         atr = c_t * 0.003
     best = None
-    for k in range(max(0, t - ZONE_MAX_AGE), t + 1):
+    for k in range(max(0, t - cfg["zone_max_age"]), t + 1):
         for z in P["Z"].get(k, ()):
             if (z["dir"] == "bull") != long:
                 continue
@@ -838,14 +971,14 @@ def _fallback_candidate(P: dict, t: int, side: str):
         E = z["top"] if long else z["bottom"]
         kind, kz_hr = z["kind"], int(P["hour"][z["known"]])
         zone_top, zone_bot, since = z["top"], z["bottom"], int(t - z["known"])
-        etype = f"H1 {kind.upper()} edge limit (fallback; nearest zone; valid {VALID_BARS} H1 bars)"
+        etype = f"{tf} {kind.upper()} edge limit (fallback; nearest zone; valid {cfg['valid']} {cfg['unit']})"
     else:
         E = c_t
         kind, kz_hr, zone_top, zone_bot, since = "none", int(P["hour"][t]), c_t, c_t, 0
-        etype = "market at close (fallback; no H1 zone in bias direction)"
-    w0 = max(0, t - 11)
+        etype = f"market at close (fallback; no {tf} zone in bias direction)"
+    w0 = max(0, t - cfg["w_recent"] + 1)
     swing_px = float(P["l"][w0:t + 1].min()) if long else float(P["h"][w0:t + 1].max())
-    S = swing_px - STOP_BUF_ATR * atr if long else swing_px + STOP_BUF_ATR * atr
+    S = swing_px - cfg["stop_buf"] * atr if long else swing_px + cfg["stop_buf"] * atr
     risk = abs(E - S)
     if risk < 0.75 * atr:
         S = E - 0.75 * atr if long else E + 0.75 * atr
@@ -856,7 +989,7 @@ def _fallback_candidate(P: dict, t: int, side: str):
     tl = sorted([p for _, p in tgt_sw if (p > E + 0.3 * atr if long else p < E - 0.3 * atr)],
                 key=lambda p: p if long else -p)
     if tl and abs(tl[0] - E) >= 0.8 * risk:
-        T, tsrc = tl[0], f"H1 swing {'high' if long else 'low'} #1"
+        T, tsrc = tl[0], f"{tf} swing {'high' if long else 'low'} #1"
     else:
         T, tsrc = (E + 1.5 * risk if long else E - 1.5 * risk), "1.5R fallback"
     cd = {"entry": float(E), "stop": float(S), "target": float(T), "rr": abs(T - E) / risk,
@@ -868,9 +1001,10 @@ def _fallback_candidate(P: dict, t: int, side: str):
 def pick_live_trade(P: dict, t: int, side: str, ctx: dict, model: dict):
     """Always returns (pick, note). Order: strict candidates -> relaxed -> fallback zone/price."""
     long = side == "LONG"
+    cfg = _cfg(P); tf = cfg["tf"]
     c_t, atr = float(P["c"][t]), float(P["atr"][t])
     cands, level = [], 0
-    for level in range(len(RELAX)):
+    for level in range(len(cfg["relax"])):
         cands = _candidates(P, t, side, ctx, level)
         if cands:
             break
@@ -879,7 +1013,7 @@ def pick_live_trade(P: dict, t: int, side: str, ctx: dict, model: dict):
     if cands:
         X = np.vstack([c["x"] for c in cands])
         if model.get("accepted"):
-            ev, p_fill = _ev(model["fill"], model["r"], pd.DataFrame(X, columns=FEATURE_COLUMNS))
+            ev, p_fill = _ev(model["fill"], model["r"], pd.DataFrame(X, columns=list(cfg["cols"])))
             k = int(np.argmax(ev))
             score, pf, evk = float(ev[k]), float(p_fill[k]), float(ev[k])
             tag = "model"
@@ -892,17 +1026,17 @@ def pick_live_trade(P: dict, t: int, side: str, ctx: dict, model: dict):
         cd = cands[k]; z = cd["zone"]
         style = "edge" if cd["e_frac"] == 0 else "mid"
         relax_txt = "" if level == 0 else f"; relaxed filters L{level}"
-        etype = (f"H1 {z['kind'].upper()} {style} limit ("
+        etype = (f"{tf} {z['kind'].upper()} {style} limit ("
                  + (f"model; P(fill)={pf:.2f}, EV={evk:+.2f}R" if tag == "model" else "heuristic")
-                 + f"{relax_txt}; valid {VALID_BARS} H1 bars)")
+                 + f"{relax_txt}; valid {cfg['valid']} {cfg['unit']})")
         ssrc = ("beyond zone" if cd["s_style"] == "zone"
-                else f"beyond recent H1 swing {'low' if long else 'high'}")
-        tsrc = (f"H1 swing {'high' if long else 'low'} #{cd['rank'] + 1}"
+                else f"beyond recent {tf} swing {'low' if long else 'high'}")
+        tsrc = (f"{tf} swing {'high' if long else 'low'} #{cd['rank'] + 1}"
                 + (" (equal-level liquidity)" if cd["is_eq"] else ""))
     else:
         cd, etype, tsrc = _fallback_candidate(P, t, side)
         z = cd["zone"]; score = 0.0
-        ssrc = f"beyond recent H1 swing {'low' if long else 'high'} (clamped 0.75-2.0 ATR)"
+        ssrc = f"beyond recent {tf} swing {'low' if long else 'high'} (clamped 0.75-2.0 ATR)"
     hr = int(P["hour"][z["known"]]) if z.get("known") is not None else int(P["hour"][t])
     kz = "London KZ" if 7 <= hr < 10 else ("Silver Bullet" if 14 <= hr < 15
                                             else ("NY AM KZ" if 12 <= hr < 15 else "none"))
@@ -918,9 +1052,23 @@ def pick_live_trade(P: dict, t: int, side: str, ctx: dict, model: dict):
             "stop_reference": cd["stop"], "applied": True, "ote_aligned": False,
             "ote_705": None, "ote_band_low": None, "ote_band_high": None,
             "kill_zone": kz, "hourly_rr": None, "daily_entry": c_t, "daily_rr": None,
+            "timeframe": tf,
         },
     }
     return pick, note
+
+
+def choose_pick(pick_h1: dict, model_h1: dict, pick_m15: dict, model_m15: dict) -> dict:
+    """Best entry across the two timeframes. Both models trained: higher expected R wins (the 15m pick
+    must beat H1 by M15_SWITCH_MARGIN). Only the 15m model trained: 15m. Otherwise H1 (the steadier one)."""
+    if pick_m15 is None:
+        return pick_h1
+    a1, a15 = bool(model_h1.get("accepted")), bool(model_m15.get("accepted"))
+    if a1 and a15:
+        return pick_m15 if pick_m15["score"] > pick_h1["score"] + M15_SWITCH_MARGIN else pick_h1
+    if a15 and not a1:
+        return pick_m15
+    return pick_h1
 
 
 
@@ -2313,7 +2461,11 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
     hourly_df = load_hourly_csv(hourly_csv_path) if hourly_csv_path else None
     HAS_HOURLY = hourly_df is not None and len(hourly_df) > 500
 
+    m15_df = load_hourly_csv(M15_CONFIGS.get(index_name, "")) if M15_CONFIGS.get(index_name) else None
+    HAS_M15 = M15_MODEL_ENABLED and m15_df is not None and len(m15_df) >= M15_MIN_BARS
+
     h1_P = None
+    m15_P = None
     if HAS_HOURLY:
         print(f"\n⏰ Hourly data loaded: {len(hourly_df)} bars "
               f"({hourly_df['timestamp'].min().date()} → {hourly_df['timestamp'].max().date()})")
@@ -2321,6 +2473,13 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
         h1_P = prep_hourly(hourly_df)
     else:
         print(f"\nℹ️  No hourly data — H1 learned model unavailable")
+    if HAS_M15:
+        print(f"\n⏱️  15-minute data loaded: {len(m15_df)} bars "
+              f"({m15_df['timestamp'].min().date()} → {m15_df['timestamp'].max().date()})")
+        print("   Precomputing M15 swings, zones, trend (+ H1 context)...")
+        m15_P = prep_m15(m15_df, h1_P, hourly_df if HAS_HOURLY else None)
+    else:
+        print(f"\nℹ️  No usable 15-minute data — 15m model unavailable")
 
     # ---------------- CLASSIC FEATURES ----------------
     print("\n🔧 Building classic technical features...")
@@ -2827,12 +2986,18 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
 
     # ---------------- H1 LEARNED MODEL ----------------
     h1_model = {"accepted": False, "n": 0, "reason": "H1 not attempted"}
-    if HAS_HOURLY and H1_MODEL_ENABLED:
-        print("\n🎯 Training intraday H1 trade model (simulated entries)...")
+    m15_model = {"accepted": False, "n": 0, "reason": "M15 not attempted"}
+    if (HAS_HOURLY and H1_MODEL_ENABLED) or HAS_M15:
         daily_base = daily_base_ctx(df_model)
         oof = oof_daily_probs(df_model, feature_columns)
+    if HAS_HOURLY and H1_MODEL_ENABLED:
+        print("\n🎯 Training intraday H1 trade model (simulated entries)...")
         train_df = build_training_set(h1_P, daily_base, oof, index_name, dP=d_P)
         h1_model = train_model(train_df, index_name)
+    if HAS_M15:
+        print("\n🎯 Training 15-minute trade model (simulated entries, H1 zones as context)...")
+        train_df15 = build_training_set(m15_P, daily_base, oof, index_name, dP=d_P)
+        m15_model = train_model(train_df15, index_name, M15_CFG)
 
     journal_state = {'cals': None, 'meta': None}
 
@@ -2915,6 +3080,12 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
             d_i = int(df_all.index[df_all['Date'] == row['Date'].iloc[0]][0])
             ctx = daily_ctx_at(daily_base_ctx(row), 0, probs, side, dP=d_P, di=d_i)
             pick, _ = pick_live_trade(h1_P, len(hourly_df) - 1, side, ctx, h1_model)
+            if HAS_M15:
+                pick15, _ = pick_live_trade(m15_P, len(m15_df) - 1, side, ctx, m15_model)
+                chosen = choose_pick(pick, h1_model, pick15, m15_model)
+                print(f"   Entry search: H1 EV {pick['score']:+.3f} vs M15 EV {pick15['score']:+.3f} "
+                      f"→ using {chosen['hourly_meta']['timeframe']}")
+                pick = chosen
             entry, stop_loss, take_profit = pick['entry'], pick['stop'], pick['target']
             entry_type, stop_src, target_src = pick['entry_type'], pick['stop_source'], pick['target_source']
             zone_strength = pick['score']
@@ -3097,7 +3268,7 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
             print(f"   R:R:          {trade['risk_reward']}")
 
             if hm is not None:
-                print(f"\n   H1 ZONE (model):")
+                print(f"\n   {hm.get('timeframe', 'H1')} ZONE (model):")
                 print(f"     Kind:          {hm['kind'].upper()}")
                 print(f"     Probability:   {hm['model_prob']:.1%}")
                 print(f"     H1 trend:      {hm['h1_trend']:+d}")
@@ -3222,6 +3393,11 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
                             if pd.Timestamp(v).tzinfo is None else pd.Timestamp(v).isoformat(),
                             float(hourly_df['close'].iloc[-1]), ZONE_MAX_AGE)
                  if HAS_HOURLY else None)
+    if HAS_M15:
+        smc["m15"] = smc_export(m15_P, len(m15_df) - 1, m15_df['timestamp'].to_numpy(),
+                                lambda v: pd.Timestamp(v).tz_localize('UTC').isoformat()
+                                if pd.Timestamp(v).tzinfo is None else pd.Timestamp(v).isoformat(),
+                                float(m15_df['close'].iloc[-1]), M15_CFG["zone_max_age"])
 
     return {
         'index_name': index_name,
@@ -3237,6 +3413,8 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
         'h1_model_accepted': h1_model.get("accepted", False),
         'h1_model_auc': h1_model.get('auc', float('nan')),
         'h1_samples': h1_model.get('n', 0),
+        'm15_model_accepted': m15_model.get("accepted", False),
+        'm15_samples': m15_model.get('n', 0),
         'journal': journal if USE_JOURNAL else None,
     }
 
@@ -3347,7 +3525,7 @@ else:
             hm = trade.get('hourly_meta')
             tag = ""
             if hm is not None:
-                tag = f"  [H1 {hm['kind'].upper()} P={hm['model_prob']:.2f}, {hm['session']}]"
+                tag = f"  [{hm.get('timeframe', 'H1')} {hm['kind'].upper()} P={hm['model_prob']:.2f}, {hm['session']}]"
             print(f"    → {trade['action']}  entry {trade['entry']:.2f}  "
                   f"stop {trade['stop_loss']:.2f} ({trade['stop_source']})  "
                   f"target {trade['take_profit']:.2f} ({trade['target_source']})  "
