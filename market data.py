@@ -3167,6 +3167,7 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
 
 
     predicted_state, probs, row, trade, baseline, adapt_info, signals = predict_for_date(LATEST_DATE)
+    probs_display = sharpen_probs(probs)          # shown / exported confidence (raw probs stay internal)
 
     if USE_JOURNAL:
         rec = adapt_info['record']
