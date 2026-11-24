@@ -2066,6 +2066,7 @@ body:has(.add-modal[open]) {
     padding: 0 !important;
 
     border: 0;
+    
 
     font-size: 14px;
 
