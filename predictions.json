@@ -1,11 +1,11 @@
 {
   "SPX": {
     "bias": "UP",
-    "confidence": 0.34834684885320305,
+    "confidence": 0.3589306126635428,
     "probabilities": {
-      "UP": 0.34834684885320305,
-      "DOWN": 0.3350648882518452,
-      "CONSOLIDATION": 0.31658826289495196
+      "UP": 0.3589306126635428,
+      "DOWN": 0.33597693031453635,
+      "CONSOLIDATION": 0.3050924570219209
     },
     "signals": [
       "Bull Breaker",
@@ -202,11 +202,11 @@
   },
   "NDX": {
     "bias": "UP",
-    "confidence": 0.39100710755433354,
+    "confidence": 0.4268380864447997,
     "probabilities": {
-      "UP": 0.39100710755433354,
-      "DOWN": 0.3694196274143202,
-      "CONSOLIDATION": 0.23957326503134582
+      "UP": 0.4268380864447997,
+      "DOWN": 0.3875548696432068,
+      "CONSOLIDATION": 0.18560704391199354
     },
     "signals": [
       "Bull Breaker",
@@ -395,11 +395,11 @@
   },
   "DJI": {
     "bias": "DOWN",
-    "confidence": 0.36998702552550605,
+    "confidence": 0.39311610663107255,
     "probabilities": {
-      "UP": 0.3644642285863417,
-      "DOWN": 0.36998702552550605,
-      "CONSOLIDATION": 0.26554874588815275
+      "UP": 0.383192626123048,
+      "DOWN": 0.39311610663107255,
+      "CONSOLIDATION": 0.22369126724587934
     },
     "signals": [
       "Bull Breaker",
@@ -570,7 +570,7 @@
       "risk": 392.45,
       "reward": 986.22,
       "risk_reward": 2.51,
-      "conviction": "Low",
+      "conviction": "Medium",
       "entry_type": "H1 FVG edge limit (heuristic; valid 8 H1 bars)",
       "stop_source": "beyond zone",
       "target_source": "H1 swing low #1"
@@ -578,11 +578,11 @@
   },
   "XAUUSD": {
     "bias": "CONSOLIDATION",
-    "confidence": 0.3483603647648293,
+    "confidence": 0.35887740401275187,
     "probabilities": {
-      "UP": 0.313790884943634,
-      "DOWN": 0.3378487502915371,
-      "CONSOLIDATION": 0.3483603647648293
+      "UP": 0.30045941214516547,
+      "DOWN": 0.34066318384208266,
+      "CONSOLIDATION": 0.35887740401275187
     },
     "signals": [
       "Bull Breaker",
