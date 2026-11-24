@@ -362,6 +362,16 @@
       line-height: 1.1;
     }
 
+    @media (max-width: 600px) {
+         #pred-tag {
+      grid-area: tag;
+      justify-self: start;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 10px;
+      line-height: 1.1;
+    }
+    }
     .conf-main__row {
       grid-area: conf;
       flex-direction: column-reverse;
