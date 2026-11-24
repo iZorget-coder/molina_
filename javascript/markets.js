@@ -794,13 +794,25 @@ function paintChart() {
       `Last: ${formatCandleLabel(last, currentTimeframe)}` +
       (dropped ? ` · ${dropped} bad candle${dropped === 1 ? '' : 's'} hidden` : '');
   }
-
+  
   // live feed time: own element in the SMC row (the header line is hidden on some phones)
   const liveEl = $('live-note');
   if (liveEl) {
-    const u = activeLive?.updatedAt;
     liveEl.hidden = !(isH1 && activeLive);
-    const shown = u ? new Date(u.getTime() + 3600000) : null;  
+
+    let shown = null;
+    if (tf === '15m') {
+      // newest 15-minute candle received, shown one hour earlier:
+      // 23:15 candle -> "live 22:15 UTC", 23:30 candle -> "live 22:30 UTC"
+      const newest = Math.max(
+        ...(activeLive?.candles ?? []).map((c) => toMs(c.time)).filter(Number.isFinite)
+      );
+      if (Number.isFinite(newest)) shown = new Date(newest - 3600000);
+    } else if (activeLive?.updatedAt) {
+      // hourly feed: unchanged (update time + 1 hour)
+      shown = new Date(activeLive.updatedAt.getTime() + 3600000);
+    }
+
     liveEl.textContent = shown
       ? `● live ${String(shown.getUTCHours()).padStart(2, '0')}:${String(shown.getUTCMinutes()).padStart(2, '0')} UTC`
       : '● live';
