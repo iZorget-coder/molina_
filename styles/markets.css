@@ -418,6 +418,7 @@
 
   .prediction__head {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 16px;
   }
@@ -451,6 +452,12 @@
   .prediction__text p {
     margin-top: 2px;
     font-size: 14px;
+  }
+
+  /* keep the prediction tag from pushing the head row wider than the card */
+  .prediction__head .tag {
+    flex-shrink: 0;
+    max-width: 100%;
   }
 
   .conf-main__row {
@@ -690,5 +697,13 @@
   /* ---------- Narrow desktop / tablet: stack the columns ---------- */
   @media (max-width: 1180px) {
     .grid { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  /* ---------- Phones: shrink the prediction tag so CONSOLIDATION fits ---------- */
+  @media (max-width: 600px) {
+    .prediction__head .tag {
+      padding: 4px 8px;
+      font-size: 12px;
+    }
   }
 }
