@@ -206,7 +206,7 @@
     "probabilities": {
       "UP": 0.4268380864447997,
       "DOWN": 0.3875548696432068,
-      "CONSOLIDATION": 0.18560704391199354
+      "CONSOLIDATION": 0.18560704391199348
     },
     "signals": [
       "Bull Breaker",
@@ -397,9 +397,9 @@
     "bias": "DOWN",
     "confidence": 0.39311610663107255,
     "probabilities": {
-      "UP": 0.38319262612304805,
+      "UP": 0.383192626123048,
       "DOWN": 0.39311610663107255,
-      "CONSOLIDATION": 0.2236912672458794
+      "CONSOLIDATION": 0.22369126724587934
     },
     "signals": [
       "Bull Breaker",
@@ -578,11 +578,11 @@
   },
   "XAUUSD": {
     "bias": "CONSOLIDATION",
-    "confidence": 0.3588774040127521,
+    "confidence": 0.3588774040127519,
     "probabilities": {
-      "UP": 0.3004594121451653,
-      "DOWN": 0.34066318384208266,
-      "CONSOLIDATION": 0.3588774040127521
+      "UP": 0.30045941214516536,
+      "DOWN": 0.3406631838420827,
+      "CONSOLIDATION": 0.3588774040127519
     },
     "signals": [
       "Bull Breaker",
