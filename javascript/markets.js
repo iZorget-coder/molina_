@@ -82,8 +82,8 @@ function formatCandleLabel(c, timeframe) {
  * Only used once the live feed has moved on to a trading day AFTER the last daily close (e.g. Monday's
  * hours while the stored close is Friday's); otherwise the stored daily close / change are shown.
  */
-function liveHeaderPrice(m) {
-  const candles = liveData?.candles;
+export function liveHeaderPrice(m, live) {
+  const candles = live?.candles;
   if (!m || !candles?.length || !Number.isFinite(m.close) || !m.closeDate) return null;
   const last = candles.reduce((a, c) => (toMs(c.time) > toMs(a.time) ? c : a), candles[0]);
   const ms = toMs(last.time);
@@ -97,7 +97,7 @@ function liveHeaderPrice(m) {
 function paintHeader(symbol, m) {
   setText('mk-symbol', symbol);
   setText('mk-sub', `${DESCRIPTIONS[symbol]} · Daily`);
-  const lv = liveHeaderPrice(m);
+  const lv = liveHeaderPrice(m, liveData);
   const shown = lv ?? (m ? { price: m.price, change: m.change, changeText: m.changeText } : null);
   setText('mk-price', shown ? shown.price : '—');
   const priceEl = $('mk-price');
