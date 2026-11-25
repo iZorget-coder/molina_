@@ -761,7 +761,7 @@ function paintChart() {
       const COUNTS = {
         '1D':  { narrow: 20, wide: 50 },
         '1H':  { narrow: 20, wide: 100 },
-        '15m': { narrow: 30, wide: 96 },
+        '15m': { narrow: 24, wide: 96 },
       };
       const n = COUNTS[currentTimeframe][narrow ? 'narrow' : 'wide'];
       const candles = rows.slice(-n);
