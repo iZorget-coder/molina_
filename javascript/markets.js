@@ -813,7 +813,7 @@ function paintChart() {
     }
 
     liveEl.textContent = shown
-      ? `● live ${String(shown.getUTCHours()).padStart(2, '0')}:${String(shown.getUTCMinutes()).padStart(2, '0')} UTC`
+      ? `● live ${String(shown.getUTCHours()).padStart(2, '0')}:${String(shown.getUTCMinutes()).padStart(2, '0')} SAST`
       : '● live';
   }
 
