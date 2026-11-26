@@ -1,11 +1,11 @@
 {
   "SPX": {
     "bias": "UP",
-    "confidence": 0.4169228213824712,
+    "confidence": 0.4948304646512501,
     "probabilities": {
-      "UP": 0.4169228213824712,
-      "DOWN": 0.30115665444309725,
-      "CONSOLIDATION": 0.28192052417443153
+      "UP": 0.4948304646512501,
+      "DOWN": 0.26825586239152605,
+      "CONSOLIDATION": 0.23691367295722393
     },
     "signals": [
       "Bull Breaker",
@@ -288,7 +288,7 @@
       "risk": 27.77,
       "reward": 69.43,
       "risk_reward": 2.5,
-      "conviction": "Medium",
+      "conviction": "Low",
       "entry_type": "H1 FVG mid limit (heuristic; valid 8 H1 bars)",
       "stop_source": "beyond zone",
       "target_source": "H1 swing high #1"
@@ -296,11 +296,11 @@
   },
   "NDX": {
     "bias": "DOWN",
-    "confidence": 0.4326394351665969,
+    "confidence": 0.5178157208796905,
     "probabilities": {
-      "UP": 0.3380121868877724,
-      "DOWN": 0.4326394351665969,
-      "CONSOLIDATION": 0.22934837794563073
+      "UP": 0.32538593176781033,
+      "DOWN": 0.5178157208796905,
+      "CONSOLIDATION": 0.15679834735249912
     },
     "signals": [
       "Bull Breaker",
@@ -589,11 +589,11 @@
   },
   "DJI": {
     "bias": "DOWN",
-    "confidence": 0.364378004990513,
+    "confidence": 0.3922181064314357,
     "probabilities": {
-      "UP": 0.33430458023081056,
-      "DOWN": 0.364378004990513,
-      "CONSOLIDATION": 0.3013174147786764
+      "UP": 0.33351021546215376,
+      "DOWN": 0.3922181064314357,
+      "CONSOLIDATION": 0.27427167810641057
     },
     "signals": [
       "Bull Breaker",
@@ -871,11 +871,11 @@
   },
   "XAUUSD": {
     "bias": "UP",
-    "confidence": 0.5950056219992127,
+    "confidence": 0.7913385009832608,
     "probabilities": {
-      "UP": 0.5950056219992127,
-      "DOWN": 0.21410400390901743,
-      "CONSOLIDATION": 0.19089037409176982
+      "UP": 0.7913385009832608,
+      "DOWN": 0.11555608702626721,
+      "CONSOLIDATION": 0.09310541199047197
     },
     "signals": [
       "Bull Breaker",
@@ -1046,17 +1046,8 @@
             "top": 3606.8,
             "bottom": 3597.8,
             "start": "2026-11-26T01:45:00+00:00",
-            "touches": 1,
-            "age": 4
-          },
-          {
-            "kind": "ob",
-            "dir": "bear",
-            "top": 3634.7,
-            "bottom": 3609.1,
-            "start": "2026-11-26T02:30:00+00:00",
-            "touches": 2,
-            "age": 2
+            "touches": 3,
+            "age": 6
           },
           {
             "kind": "fvg",
@@ -1065,7 +1056,16 @@
             "bottom": 3579.4,
             "start": "2026-11-25T21:30:00+00:00",
             "touches": 10,
-            "age": 17
+            "age": 19
+          },
+          {
+            "kind": "ob",
+            "dir": "bear",
+            "top": 3634.7,
+            "bottom": 3609.1,
+            "start": "2026-11-26T02:30:00+00:00",
+            "touches": 3,
+            "age": 4
           },
           {
             "kind": "ifvg",
@@ -1074,7 +1074,7 @@
             "bottom": 3627.45,
             "start": "2026-11-24T04:15:00+00:00",
             "touches": 10,
-            "age": 180
+            "age": 182
           },
           {
             "kind": "ob",
@@ -1083,7 +1083,7 @@
             "bottom": 3567.7,
             "start": "2026-11-25T21:00:00+00:00",
             "touches": 2,
-            "age": 20
+            "age": 22
           },
           {
             "kind": "fvg",
@@ -1092,7 +1092,7 @@
             "bottom": 3549.6,
             "start": "2026-11-25T19:45:00+00:00",
             "touches": 1,
-            "age": 24
+            "age": 26
           }
         ],
         "levels": [
