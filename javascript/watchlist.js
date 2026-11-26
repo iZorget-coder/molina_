@@ -12,6 +12,7 @@ let authReady = null;
 const liveBySymbol = new Map();      // hourly feed
 const fifteenBySymbol = new Map();   // 15-minute feed
 const unsubs = new Map();            // symbol -> [unsubscribe hourly, unsubscribe 15-minute]
+const fifteenSeenAt = new Map();      // symbol -> Date.now() when its last 15-minute snapshot arrived
 
 function whenAuthReady() {
   if (authReady) return authReady;
@@ -85,11 +86,15 @@ function newestMs(feed) {
   return times.length ? Math.max(...times) : -Infinity;
 }
 
-/** The feed whose newest candle is the most recent (15-minute normally beats hourly), as in markets.js. */
+/**
+ * The 15-minute feed drives every price on the cards. The hourly feed only stands in when there is no
+ * 15-minute data, or when the 15-minute data is more than an hour behind it.
+ */
 function freshestFeed(symbol) {
   const hourly = liveBySymbol.get(symbol) || null;
   const fifteen = fifteenBySymbol.get(symbol) || null;
-  return newestMs(fifteen) >= newestMs(hourly) ? (fifteen || hourly) : hourly;
+  if (fifteen?.candles?.length && newestMs(fifteen) >= newestMs(hourly) - 3600000) return fifteen;
+  return hourly || fifteen;
 }
 
 /*
@@ -116,6 +121,48 @@ function scheduleRender() {
   });
 }
 
+const FIFTEEN_MS = 15 * 60 * 1000;
+const STALE_MS = 20 * 60 * 1000;      // a 15-minute snapshot older than this counts as stale
+let heartbeat = null;
+
+function subscribeFifteen(sym) {
+  return subscribeLiveFifteen(sym, (data) => {
+    fifteenBySymbol.set(sym, data);
+    fifteenSeenAt.set(sym, Date.now());
+    console.debug(`[live] ${sym} 15m snapshot, newest candle`,
+      Number.isFinite(newestMs(data)) && newestMs(data) > 0 ? new Date(newestMs(data)).toISOString() : 'none');
+    scheduleRender();
+  });
+}
+
+/**
+ * Safety net: the feeds are pushed by Firestore, but a PC that slept or lost its connection can miss
+ * a push. Any market whose 15-minute snapshot is older than STALE_MS is resubscribed, which delivers
+ * the latest snapshot straight away.
+ */
+function refreshStaleFeeds() {
+  const now = Date.now();
+  for (const [sym, subs] of unsubs) {
+    if (now - (fifteenSeenAt.get(sym) || 0) > STALE_MS) {
+      subs[1]?.();
+      subs[1] = subscribeFifteen(sym);
+    }
+  }
+}
+
+/** Runs shortly after every quarter hour (:00, :15, :30, :45): repaint and refresh stale feeds. */
+function startHeartbeat() {
+  if (heartbeat) return;
+  const next = () => FIFTEEN_MS - (Date.now() % FIFTEEN_MS) + 45000;   // 45 s after each quarter hour
+  const tick = () => {
+    heartbeat = setTimeout(tick, next());
+    if (!unsubs.size || document.visibilityState !== 'visible') return;
+    refreshStaleFeeds();
+    scheduleRender();
+  };
+  heartbeat = setTimeout(tick, next());
+}
+
 function trackLive(symbols) {
   // stop watching symbols that left the watchlist
   for (const [sym, subs] of unsubs) {
@@ -124,6 +171,7 @@ function trackLive(symbols) {
       unsubs.delete(sym);
       liveBySymbol.delete(sym);
       fifteenBySymbol.delete(sym);
+      fifteenSeenAt.delete(sym);
     }
   }
   // start watching new ones: hourly AND 15-minute, so prices are as fresh as on the markets page
@@ -136,12 +184,10 @@ function trackLive(symbols) {
         liveBySymbol.set(sym, data);
         scheduleRender();
       }),
-      subscribeLiveFifteen(sym, (data) => {
-        fifteenBySymbol.set(sym, data);
-        scheduleRender();
-      }),
+      subscribeFifteen(sym),
     ]);
   }
+  if (unsubs.size) startHeartbeat();
 }
 
 export function disposeWatchlistLive() {
@@ -149,14 +195,18 @@ export function disposeWatchlistLive() {
   unsubs.clear();
   liveBySymbol.clear();
   fifteenBySymbol.clear();
+  fifteenSeenAt.clear();
+  clearTimeout(heartbeat);
+  heartbeat = null;
 }
 
-// Coming back to the tab (a PC tab can sit in the background for hours): repaint straight away
-// and pick up a newer daily forecast if the page has been open a while.
+// Coming back to the tab (a PC tab can sit in the background for hours): refresh anything stale,
+// repaint straight away and pick up a newer daily forecast if the page has been open a while.
 if (typeof document !== 'undefined' && !window.__molinaWatchlistVisBound) {
   window.__molinaWatchlistVisBound = true;
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState !== 'visible' || !cachedSymbols) return;
+    refreshStaleFeeds();
     if (Date.now() - liveLoadedAt > 5 * 60 * 1000) {
       try { await loadLive(); } catch (err) { console.error('Could not refresh forecasts', err); }
     }
