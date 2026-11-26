@@ -1,11 +1,11 @@
 {
   "SPX": {
-    "bias": "DOWN",
-    "confidence": 0.3975287688858696,
+    "bias": "UP",
+    "confidence": 0.4169228213824712,
     "probabilities": {
-      "UP": 0.3320646299279431,
-      "DOWN": 0.3975287688858696,
-      "CONSOLIDATION": 0.2704066011861874
+      "UP": 0.4169228213824712,
+      "DOWN": 0.30115665444309725,
+      "CONSOLIDATION": 0.28192052417443153
     },
     "signals": [
       "Bull Breaker",
@@ -17,11 +17,11 @@
           {
             "kind": "fvg",
             "dir": "bull",
-            "top": 7138.93,
+            "top": 7152.66,
             "bottom": 7078.5,
             "start": "2026-11-22",
-            "touches": 1,
-            "age": 1
+            "touches": 3,
+            "age": 3
           },
           {
             "kind": "breaker",
@@ -30,7 +30,7 @@
             "bottom": 7369.55,
             "start": "2026-11-17",
             "touches": 3,
-            "age": 11
+            "age": 13
           },
           {
             "kind": "fvg",
@@ -39,7 +39,7 @@
             "bottom": 7444.2,
             "start": "2026-11-04",
             "touches": 10,
-            "age": 24
+            "age": 26
           },
           {
             "kind": "ob",
@@ -48,7 +48,7 @@
             "bottom": 7635.81,
             "start": "2026-11-04",
             "touches": 4,
-            "age": 25
+            "age": 27
           },
           {
             "kind": "ob",
@@ -57,7 +57,7 @@
             "bottom": 7690.94,
             "start": "2026-10-29",
             "touches": 1,
-            "age": 29
+            "age": 31
           },
           {
             "kind": "fvg",
@@ -66,19 +66,19 @@
             "bottom": 7754.15,
             "start": "2026-10-13",
             "touches": 3,
-            "age": 40
+            "age": 42
           }
         ],
         "levels": [
           {
             "type": "bsl",
-            "price": 7415.64,
-            "start": "2026-11-19"
+            "price": 7295.6,
+            "start": "2026-11-23"
           },
           {
             "type": "bsl",
-            "price": 7652.76,
-            "start": "2026-11-12"
+            "price": 7415.64,
+            "start": "2026-11-19"
           },
           {
             "type": "ssl",
@@ -281,26 +281,26 @@
     "close": 7182.78,
     "date": "2026-11-25",
     "trade": {
-      "action": "SHORT",
-      "entry": 7238.25,
-      "stop_loss": 7302.02,
-      "take_profit": 6985.07,
-      "risk": 63.77,
-      "reward": 253.18,
-      "risk_reward": 3.97,
+      "action": "LONG",
+      "entry": 7168.75,
+      "stop_loss": 7140.98,
+      "take_profit": 7238.18,
+      "risk": 27.77,
+      "reward": 69.43,
+      "risk_reward": 2.5,
       "conviction": "Medium",
-      "entry_type": "H1 FVG edge limit (heuristic; valid 8 H1 bars)",
-      "stop_source": "beyond recent H1 swing high",
-      "target_source": "H1 swing low #1"
+      "entry_type": "H1 FVG mid limit (heuristic; valid 8 H1 bars)",
+      "stop_source": "beyond zone",
+      "target_source": "H1 swing high #1"
     }
   },
   "NDX": {
     "bias": "DOWN",
-    "confidence": 0.43263943516659686,
+    "confidence": 0.4326394351665969,
     "probabilities": {
-      "UP": 0.33801218688777246,
-      "DOWN": 0.43263943516659686,
-      "CONSOLIDATION": 0.2293483779456307
+      "UP": 0.3380121868877724,
+      "DOWN": 0.4326394351665969,
+      "CONSOLIDATION": 0.22934837794563073
     },
     "signals": [
       "Bull Breaker",
@@ -871,11 +871,11 @@
   },
   "XAUUSD": {
     "bias": "UP",
-    "confidence": 0.5950056219992128,
+    "confidence": 0.5950056219992127,
     "probabilities": {
-      "UP": 0.5950056219992128,
-      "DOWN": 0.21410400390901738,
-      "CONSOLIDATION": 0.1908903740917698
+      "UP": 0.5950056219992127,
+      "DOWN": 0.21410400390901743,
+      "CONSOLIDATION": 0.19089037409176982
     },
     "signals": [
       "Bull Breaker",
@@ -1041,22 +1041,22 @@
       "m15": {
         "zones": [
           {
-            "kind": "ob",
-            "dir": "bear",
-            "top": 3634.7,
-            "bottom": 3609.1,
-            "start": "2026-11-26T02:30:00+00:00",
-            "touches": 1,
-            "age": 1
-          },
-          {
             "kind": "fvg",
             "dir": "bull",
             "top": 3606.8,
             "bottom": 3597.8,
             "start": "2026-11-26T01:45:00+00:00",
-            "touches": 0,
-            "age": 3
+            "touches": 1,
+            "age": 4
+          },
+          {
+            "kind": "ob",
+            "dir": "bear",
+            "top": 3634.7,
+            "bottom": 3609.1,
+            "start": "2026-11-26T02:30:00+00:00",
+            "touches": 2,
+            "age": 2
           },
           {
             "kind": "fvg",
@@ -1065,7 +1065,7 @@
             "bottom": 3579.4,
             "start": "2026-11-25T21:30:00+00:00",
             "touches": 10,
-            "age": 16
+            "age": 17
           },
           {
             "kind": "ifvg",
@@ -1074,7 +1074,7 @@
             "bottom": 3627.45,
             "start": "2026-11-24T04:15:00+00:00",
             "touches": 10,
-            "age": 179
+            "age": 180
           },
           {
             "kind": "ob",
@@ -1083,28 +1083,28 @@
             "bottom": 3567.7,
             "start": "2026-11-25T21:00:00+00:00",
             "touches": 2,
-            "age": 19
+            "age": 20
           },
           {
             "kind": "fvg",
-            "dir": "bear",
-            "top": 3650.76,
-            "bottom": 3647.62,
-            "start": "2026-11-24T02:15:00+00:00",
-            "touches": 0,
-            "age": 185
+            "dir": "bull",
+            "top": 3565.8,
+            "bottom": 3549.6,
+            "start": "2026-11-25T19:45:00+00:00",
+            "touches": 1,
+            "age": 24
           }
         ],
         "levels": [
           {
             "type": "bsl",
-            "price": 3646.82,
-            "start": "2026-11-24T12:45:00+00:00"
+            "price": 3634.7,
+            "start": "2026-11-26T02:30:00+00:00"
           },
           {
             "type": "bsl",
-            "price": 3678.49,
-            "start": "2026-11-24T01:45:00+00:00"
+            "price": 3646.82,
+            "start": "2026-11-24T12:45:00+00:00"
           },
           {
             "type": "ssl",
