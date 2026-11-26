@@ -3,9 +3,9 @@
     "bias": "DOWN",
     "confidence": 0.3975287688858696,
     "probabilities": {
-      "UP": 0.332064629927943,
+      "UP": 0.3320646299279431,
       "DOWN": 0.3975287688858696,
-      "CONSOLIDATION": 0.27040660118618737
+      "CONSOLIDATION": 0.2704066011861874
     },
     "signals": [
       "Bull Breaker",
@@ -589,11 +589,11 @@
   },
   "DJI": {
     "bias": "DOWN",
-    "confidence": 0.42845942174804347,
+    "confidence": 0.364378004990513,
     "probabilities": {
-      "UP": 0.3064618377032367,
-      "DOWN": 0.42845942174804347,
-      "CONSOLIDATION": 0.2650787405487198
+      "UP": 0.33430458023081056,
+      "DOWN": 0.364378004990513,
+      "CONSOLIDATION": 0.3013174147786764
     },
     "signals": [
       "Bull Breaker",
@@ -603,22 +603,22 @@
       "daily": {
         "zones": [
           {
-            "kind": "fvg",
-            "dir": "bull",
-            "top": 49294.49,
-            "bottom": 48878.0,
-            "start": "2026-11-22",
-            "touches": 1,
-            "age": 1
-          },
-          {
             "kind": "ifvg",
             "dir": "bear",
             "top": 51718.6,
             "bottom": 51245.28,
             "start": "2026-11-17",
             "touches": 1,
-            "age": 11
+            "age": 13
+          },
+          {
+            "kind": "fvg",
+            "dir": "bull",
+            "top": 49033.31,
+            "bottom": 48878.0,
+            "start": "2026-11-22",
+            "touches": 1,
+            "age": 3
           },
           {
             "kind": "ob",
@@ -627,7 +627,7 @@
             "bottom": 52410.23,
             "start": "2026-11-04",
             "touches": 8,
-            "age": 25
+            "age": 27
           },
           {
             "kind": "ifvg",
@@ -636,7 +636,7 @@
             "bottom": 53230.08,
             "start": "2026-08-20",
             "touches": 10,
-            "age": 79
+            "age": 81
           },
           {
             "kind": "ob",
@@ -645,7 +645,7 @@
             "bottom": 54266.12,
             "start": "2026-08-05",
             "touches": 0,
-            "age": 89
+            "age": 91
           }
         ],
         "levels": [
@@ -863,7 +863,7 @@
       "risk": 333.72,
       "reward": 1728.75,
       "risk_reward": 5.18,
-      "conviction": "Medium",
+      "conviction": "Low",
       "entry_type": "H1 BREAKER edge limit (heuristic; relaxed filters L1; valid 8 H1 bars)",
       "stop_source": "beyond zone",
       "target_source": "H1 swing low #1 (equal-level liquidity)"
@@ -871,11 +871,11 @@
   },
   "XAUUSD": {
     "bias": "UP",
-    "confidence": 0.5950056219992127,
+    "confidence": 0.5950056219992128,
     "probabilities": {
-      "UP": 0.5950056219992127,
-      "DOWN": 0.21410400390901743,
-      "CONSOLIDATION": 0.19089037409176982
+      "UP": 0.5950056219992128,
+      "DOWN": 0.21410400390901738,
+      "CONSOLIDATION": 0.1908903740917698
     },
     "signals": [
       "Bull Breaker",
@@ -1046,8 +1046,8 @@
             "top": 3634.7,
             "bottom": 3609.1,
             "start": "2026-11-26T02:30:00+00:00",
-            "touches": 0,
-            "age": 0
+            "touches": 1,
+            "age": 1
           },
           {
             "kind": "fvg",
@@ -1056,7 +1056,7 @@
             "bottom": 3597.8,
             "start": "2026-11-26T01:45:00+00:00",
             "touches": 0,
-            "age": 2
+            "age": 3
           },
           {
             "kind": "fvg",
@@ -1065,7 +1065,7 @@
             "bottom": 3579.4,
             "start": "2026-11-25T21:30:00+00:00",
             "touches": 10,
-            "age": 15
+            "age": 16
           },
           {
             "kind": "ifvg",
@@ -1074,7 +1074,7 @@
             "bottom": 3627.45,
             "start": "2026-11-24T04:15:00+00:00",
             "touches": 10,
-            "age": 178
+            "age": 179
           },
           {
             "kind": "ob",
@@ -1083,7 +1083,7 @@
             "bottom": 3567.7,
             "start": "2026-11-25T21:00:00+00:00",
             "touches": 2,
-            "age": 18
+            "age": 19
           },
           {
             "kind": "fvg",
@@ -1092,7 +1092,7 @@
             "bottom": 3647.62,
             "start": "2026-11-24T02:15:00+00:00",
             "touches": 0,
-            "age": 184
+            "age": 185
           }
         ],
         "levels": [
