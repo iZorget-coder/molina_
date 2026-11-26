@@ -60,11 +60,12 @@ HOURLY_FALLBACK = {
 # even when its calls are good. Shown confidence is the model's probabilities "sharpened":
 #     p_i  ->  p_i ** CONFIDENCE_SHARPEN / sum(p_j ** CONFIDENCE_SHARPEN)
 # The ranking never changes (same predicted direction), the three still add up to 100%, and 1.0 = off.
-# Example at 1.7:  UP 45 / DOWN 30 / CONS 25  ->  UP 54 / DOWN 26 / CONS 20.   Try 1.2 (mild) to 1.8 (strong).
+# Example at 3.2:  UP 40 / DOWN 33 / CONS 27  ->  UP 55 / DOWN 29 / CONS 16.   Try 2.5 (mild) to 4.0 (strong).
+# Near-ties (e.g. 35 / 33 / 32) stay in the high 30s on purpose: that is the model having no view.
 # Only what is displayed / exported to predictions.json (and the High/Medium/Low label) uses this;
 # the model, the bias gate and the H1 model's features keep the raw probabilities, so nothing
 # that was trained is shifted.
-CONFIDENCE_SHARPEN         = 1.7
+CONFIDENCE_SHARPEN         = 3.2
 
 def sharpen_probs(probs, k=None):
     """Same ranking, more decisive spread, still sums to 1."""
@@ -2954,6 +2955,7 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
     df_model = df_all.dropna(subset=['Target']).reset_index(drop=True)
     df_model['Target'] = df_model['Target'].astype(int)
     df_live = df_all[df_all['Target'].isna()].reset_index(drop=True)
+
     d_P = prep_daily(df_all)     # df_model is a prefix of df_all, so daily bar indexes line up
 
     print(f"\n✅ Features created ({len(feature_columns)} total) | "
@@ -2979,6 +2981,16 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
     y_proba = model1.predict_proba(X_test_scaled)
     accuracy = accuracy_score(y_test, y_pred)
     print(f"✅ Test Accuracy: {accuracy:.2%}")
+
+    # How honest is the displayed confidence? Hit rate on the hold-out by displayed-confidence bucket.
+    _pw = np.clip(y_proba, 1e-12, None) ** CONFIDENCE_SHARPEN
+    _disp = _pw / _pw.sum(axis=1, keepdims=True)
+    _top = _disp.max(axis=1)
+    _hit = model1.classes_[_disp.argmax(axis=1)] == y_test.to_numpy()
+    for _lo, _hi in [(0, .45), (.45, .55), (.55, .65), (.65, 1.01)]:
+        _m = (_top >= _lo) & (_top < _hi)
+        if _m.sum() >= 15:
+            print(f"   shown {_lo:.0%}-{min(_hi, 1):.0%}: n={int(_m.sum()):>4} | actually right {_hit[_m].mean():.1%}")
 
     importance_df = pd.DataFrame({
         'Feature': feature_columns, 'Importance': model1.feature_importances_
@@ -3066,7 +3078,7 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
             zone_pos = 0.5
         dominant = max(probs, key=probs.get)
         confidence = sharpen_probs(probs)[dominant]          # shown confidence (see CONFIDENCE_SHARPEN)
-        conviction = 'High' if confidence >= 0.55 else ('Medium' if confidence >= 0.38 else 'Low')
+        conviction = 'High' if confidence >= 0.65 else ('Medium' if confidence >= 0.50 else 'Low')
         side = _bias_gate(row, probs)
         hourly_meta = None; stop_anchor = None; target_anchor = None
         entry = close

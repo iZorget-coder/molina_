@@ -1,6 +1,6 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, auth, onAuthStateChanged } from './firebase.js';
-import { MARKETS, fetchLatestPredictions, subscribeLiveHourly } from './predictions.js';
+import { MARKETS, fetchLatestPredictions, subscribeLiveHourly, subscribeLiveFifteen } from './predictions.js';
 import { selectMarket, liveHeaderPrice } from './markets.js';
 
 const DEFAULT_WATCHLIST = ['SPX'];
@@ -8,9 +8,10 @@ const DEFAULT_WATCHLIST = ['SPX'];
 let cachedSymbols = null;
 let authReady = null;
 
-// symbol -> latest live hourly snapshot, exactly like markets.js's `liveData`
-const liveBySymbol = new Map();
-const unsubs = new Map();
+// symbol -> latest live snapshot per feed, exactly like markets.js's `liveData` / `liveFifteen`
+const liveBySymbol = new Map();      // hourly feed
+const fifteenBySymbol = new Map();   // 15-minute feed
+const unsubs = new Map();            // symbol -> [unsubscribe hourly, unsubscribe 15-minute]
 
 function whenAuthReady() {
   if (authReady) return authReady;
@@ -61,34 +62,106 @@ async function saveWatchlist(symbols) {
 /* ---------- Live forecasts (Firestore: daily_predictions) ---------- */
 
 let live = null;
+let liveLoadedAt = 0;
 
 async function loadLive() {
   live = await fetchLatestPredictions();
+  liveLoadedAt = Date.now();
   return live;
 }
 
-/* ---------- Hourly feed (same pattern markets.js uses with unsubLive / liveData) ---------- */
+/* ---------- Live feeds (same pattern markets.js uses with unsubLive / liveData / liveFifteen) ---------- */
 
-function trackLive(symbols, onChange) {
+// Same timestamp rule as markets.js: a time with no zone is UTC.
+const toMs = (v) => {
+  if (typeof v !== 'string') return NaN;
+  let s = /^\d{4}-\d{2}-\d{2} /.test(v) ? v.replace(' ', 'T') : v;
+  if (/T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s)) s += 'Z';
+  return Date.parse(s);
+};
+
+function newestMs(feed) {
+  const times = (feed?.candles || []).map(c => toMs(c.time)).filter(Number.isFinite);
+  return times.length ? Math.max(...times) : -Infinity;
+}
+
+/** The feed whose newest candle is the most recent (15-minute normally beats hourly), as in markets.js. */
+function freshestFeed(symbol) {
+  const hourly = liveBySymbol.get(symbol) || null;
+  const fifteen = fifteenBySymbol.get(symbol) || null;
+  return newestMs(fifteen) >= newestMs(hourly) ? (fifteen || hourly) : hourly;
+}
+
+/*
+ * One shared render for every view that is on screen. Each live update (from either feed, for any
+ * symbol) re-renders the dashboard sidebar, the forecast cards and the watchlist table, whichever of
+ * them exist right now. Before, every symbol was subscribed once with whichever view happened to call
+ * first, so only that view ever refreshed and it kept the list of symbols it had at that moment.
+ */
+function renderAllViews() {
+  if (!cachedSymbols) return;
+  renderDashboardWatchlist(cachedSymbols);
+  renderDashboardCards(cachedSymbols);
+  renderWatchlistPage(cachedSymbols);
+}
+
+let renderQueued = false;
+function scheduleRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  // batches bursts of updates (several markets, two feeds) into one paint
+  requestAnimationFrame(() => {
+    renderQueued = false;
+    renderAllViews();
+  });
+}
+
+function trackLive(symbols) {
   // stop watching symbols that left the watchlist
-  for (const [sym, unsub] of unsubs) {
-    if (!symbols.includes(sym)) { unsub(); unsubs.delete(sym); liveBySymbol.delete(sym); }
+  for (const [sym, subs] of unsubs) {
+    if (!symbols.includes(sym)) {
+      subs.forEach(unsub => unsub());
+      unsubs.delete(sym);
+      liveBySymbol.delete(sym);
+      fifteenBySymbol.delete(sym);
+    }
   }
-  // start watching new ones
+  // start watching new ones: hourly AND 15-minute, so prices are as fresh as on the markets page
   for (const sym of symbols) {
     if (unsubs.has(sym)) continue;
     liveBySymbol.set(sym, null);
-    unsubs.set(sym, subscribeLiveHourly(sym, (data) => {
-      liveBySymbol.set(sym, data);
-      onChange(sym, data);
-    }));
+    fifteenBySymbol.set(sym, null);
+    unsubs.set(sym, [
+      subscribeLiveHourly(sym, (data) => {
+        liveBySymbol.set(sym, data);
+        scheduleRender();
+      }),
+      subscribeLiveFifteen(sym, (data) => {
+        fifteenBySymbol.set(sym, data);
+        scheduleRender();
+      }),
+    ]);
   }
 }
 
 export function disposeWatchlistLive() {
-  for (const unsub of unsubs.values()) unsub();
+  for (const subs of unsubs.values()) subs.forEach(unsub => unsub());
   unsubs.clear();
   liveBySymbol.clear();
+  fifteenBySymbol.clear();
+}
+
+// Coming back to the tab (a PC tab can sit in the background for hours): repaint straight away
+// and pick up a newer daily forecast if the page has been open a while.
+if (typeof document !== 'undefined' && !window.__molinaWatchlistVisBound) {
+  window.__molinaWatchlistVisBound = true;
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState !== 'visible' || !cachedSymbols) return;
+    if (Date.now() - liveLoadedAt > 5 * 60 * 1000) {
+      try { await loadLive(); } catch (err) { console.error('Could not refresh forecasts', err); }
+    }
+    renderAllViews();
+  });
 }
 
  
@@ -108,11 +181,10 @@ function getMarket(symbol) {
     changeText: '—',
   };
 
-  // Same override the markets header uses: hourly close wins once a new
-  // session has started past the last daily close. `liveHeaderPrice` reads
-  // `close` + `date` (falling back to `closeDate`) from the base object.
-  const hourly = liveHeaderPrice(base, liveBySymbol.get(symbol));
-  return hourly ? { ...base, ...hourly } : base;
+  // Same override the markets header uses: the freshest live candle (15-minute, else hourly) wins once
+  // a new session has started past the last daily close. `liveHeaderPrice` reads `close` + `closeDate`.
+  const fresh = liveHeaderPrice(base, freshestFeed(symbol));
+  return fresh ? { ...base, ...fresh, isLive: true } : base;
 }
 
  
@@ -166,7 +238,7 @@ export async function loadWatchlistPage() {
 
   try {
     const [symbols] = await Promise.all([fetchWatchlist(), loadLive()]);
-    trackLive(symbols, () => renderWatchlistPage(symbols));
+    trackLive(symbols);
     renderWatchlistPage(symbols);
   } catch (err) {
     console.error(err);
@@ -216,7 +288,7 @@ export async function loadDashboardWatchlist() {
 
   try {
     const [symbols] = await Promise.all([fetchWatchlist(), loadLive()]);
-    trackLive(symbols, () => renderDashboardWatchlist(symbols));
+    trackLive(symbols);
     renderDashboardWatchlist(symbols);
   } catch (err) {
     console.error(err);
@@ -319,7 +391,7 @@ function cardMarkup(market) {
         <div class="conf__row"><span class="conf__label">Confidence</span><span class="conf__value">${confidenceText}</span></div>
         <div class="progress"><div class="progress__bar" style="width:${confidence}%"></div></div>
         <div class="conf__row conf__row--small">
-          <span class="muted-light">Last close <strong>${market.price}</strong></span>
+          <span class="muted-light">${market.isLive ? 'Latest' : 'Last close'} <strong>${market.price}</strong></span>
           <span class="${changeClass(market)}">${market.changeText}</span>
         </div>
       </div>
@@ -337,7 +409,7 @@ export async function loadDashboardCards() {
 
   try {
     const [symbols] = await Promise.all([fetchWatchlist(), loadLive()]);
-    trackLive(symbols, () => renderDashboardCards(symbols));
+    trackLive(symbols);
     renderDashboardCards(symbols);
   } catch (err) {
     console.error(err);
