@@ -1,11 +1,11 @@
 {
   "SPX": {
     "bias": "CONSOLIDATION",
-    "confidence": 0.3789112928046549,
+    "confidence": 0.37891129280465496,
     "probabilities": {
-      "UP": 0.3346418782587543,
-      "DOWN": 0.28644682893659085,
-      "CONSOLIDATION": 0.3789112928046549
+      "UP": 0.33464187825875436,
+      "DOWN": 0.28644682893659074,
+      "CONSOLIDATION": 0.37891129280465496
     },
     "signals": [
       "Bull Breaker",
@@ -294,11 +294,11 @@
   },
   "NDX": {
     "bias": "DOWN",
-    "confidence": 0.5109249026466637,
+    "confidence": 0.5109249026466635,
     "probabilities": {
-      "UP": 0.23897820678522336,
-      "DOWN": 0.5109249026466637,
-      "CONSOLIDATION": 0.25009689056811313
+      "UP": 0.2389782067852234,
+      "DOWN": 0.5109249026466635,
+      "CONSOLIDATION": 0.2500968905681131
     },
     "signals": [
       "Bull Breaker",
@@ -1042,8 +1042,17 @@
             "top": 3693.9,
             "bottom": 3671.2,
             "start": "2026-11-27T05:30:00+00:00",
-            "touches": 3,
-            "age": 3
+            "touches": 6,
+            "age": 6
+          },
+          {
+            "kind": "fvg",
+            "dir": "bull",
+            "top": 3676.1,
+            "bottom": 3672.9,
+            "start": "2026-11-27T06:15:00+00:00",
+            "touches": 0,
+            "age": 2
           },
           {
             "kind": "fvg",
@@ -1052,7 +1061,7 @@
             "bottom": 3668.2,
             "start": "2026-11-27T05:00:00+00:00",
             "touches": 3,
-            "age": 4
+            "age": 7
           },
           {
             "kind": "fvg",
@@ -1061,7 +1070,7 @@
             "bottom": 3646.5,
             "start": "2026-11-27T02:15:00+00:00",
             "touches": 1,
-            "age": 15
+            "age": 18
           },
           {
             "kind": "fvg",
@@ -1070,7 +1079,7 @@
             "bottom": 3621.6,
             "start": "2026-11-27T01:45:00+00:00",
             "touches": 0,
-            "age": 17
+            "age": 20
           },
           {
             "kind": "fvg",
@@ -1079,16 +1088,7 @@
             "bottom": 3606.1,
             "start": "2026-11-27T01:30:00+00:00",
             "touches": 0,
-            "age": 18
-          },
-          {
-            "kind": "breaker",
-            "dir": "bull",
-            "top": 3609.1,
-            "bottom": 3601.7,
-            "start": "2026-11-27T01:45:00+00:00",
-            "touches": 0,
-            "age": 19
+            "age": 21
           }
         ],
         "levels": [
@@ -1133,8 +1133,8 @@
     "confidence": 0.37166248375179345,
     "probabilities": {
       "UP": 0.37166248375179345,
-      "DOWN": 0.33151244837663807,
-      "CONSOLIDATION": 0.2968250678715685
+      "DOWN": 0.33151244837663774,
+      "CONSOLIDATION": 0.2968250678715688
     },
     "signals": [
       "Bull Breaker",
@@ -1328,27 +1328,18 @@
           {
             "kind": "fvg",
             "dir": "bull",
-            "top": 1.09806,
-            "bottom": 1.09752,
-            "start": "2026-11-27T05:00:00+00:00",
-            "touches": 4,
-            "age": 4
-          },
-          {
-            "kind": "fvg",
-            "dir": "bull",
             "top": 1.09747,
             "bottom": 1.09733,
             "start": "2026-11-27T04:45:00+00:00",
-            "touches": 1,
-            "age": 5
+            "touches": 3,
+            "age": 8
           },
           {
-            "kind": "ob",
+            "kind": "ifvg",
             "dir": "bear",
-            "top": 1.09826,
-            "bottom": 1.09769,
-            "start": "2026-11-27T06:15:00+00:00",
+            "top": 1.09806,
+            "bottom": 1.09752,
+            "start": "2026-11-27T07:15:00+00:00",
             "touches": 0,
             "age": 0
           },
@@ -1359,7 +1350,7 @@
             "bottom": 1.09709,
             "start": "2026-11-27T01:45:00+00:00",
             "touches": 4,
-            "age": 19
+            "age": 22
           },
           {
             "kind": "fvg",
@@ -1368,16 +1359,25 @@
             "bottom": 1.0969,
             "start": "2026-11-27T01:30:00+00:00",
             "touches": 3,
-            "age": 18
+            "age": 21
           },
           {
-            "kind": "ob",
+            "kind": "ifvg",
+            "dir": "bull",
+            "top": 1.0969,
+            "bottom": 1.09658,
+            "start": "2026-11-27T01:45:00+00:00",
+            "touches": 0,
+            "age": 22
+          },
+          {
+            "kind": "ifvg",
             "dir": "bear",
-            "top": 1.09866,
-            "bottom": 1.09806,
-            "start": "2026-11-27T05:30:00+00:00",
-            "touches": 2,
-            "age": 3
+            "top": 1.0984,
+            "bottom": 1.09804,
+            "start": "2026-11-26T14:45:00+00:00",
+            "touches": 10,
+            "age": 66
           }
         ],
         "levels": [
@@ -1438,11 +1438,11 @@
   },
   "USDCAD": {
     "bias": "DOWN",
-    "confidence": 0.3937197240157936,
+    "confidence": 0.39371972401579364,
     "probabilities": {
-      "UP": 0.3094511908120332,
-      "DOWN": 0.3937197240157936,
-      "CONSOLIDATION": 0.29682908517217327
+      "UP": 0.3094511908120331,
+      "DOWN": 0.39371972401579364,
+      "CONSOLIDATION": 0.2968290851721733
     },
     "signals": [
       "Bull IFVG"
@@ -1621,58 +1621,58 @@
       "m15": {
         "zones": [
           {
-            "kind": "ifvg",
-            "dir": "bear",
-            "top": 1.42424,
-            "bottom": 1.42398,
-            "start": "2026-11-27T05:15:00+00:00",
-            "touches": 2,
-            "age": 5
-          },
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 1.42432,
-            "bottom": 1.42422,
-            "start": "2026-11-27T04:45:00+00:00",
-            "touches": 1,
-            "age": 5
-          },
-          {
-            "kind": "ifvg",
+            "kind": "ob",
             "dir": "bull",
-            "top": 1.42412,
-            "bottom": 1.42358,
-            "start": "2026-11-27T06:30:00+00:00",
+            "top": 1.42396,
+            "bottom": 1.42231,
+            "start": "2026-11-27T07:00:00+00:00",
             "touches": 0,
             "age": 0
           },
           {
             "kind": "ifvg",
             "dir": "bear",
-            "top": 1.42459,
-            "bottom": 1.42452,
-            "start": "2026-11-27T05:00:00+00:00",
-            "touches": 0,
-            "age": 6
-          },
-          {
-            "kind": "breaker",
-            "dir": "bull",
-            "top": 1.42382,
-            "bottom": 1.42308,
-            "start": "2026-11-27T03:30:00+00:00",
-            "touches": 6,
-            "age": 12
+            "top": 1.42344,
+            "bottom": 1.42325,
+            "start": "2026-11-27T07:00:00+00:00",
+            "touches": 1,
+            "age": 1
           },
           {
             "kind": "breaker",
             "dir": "bear",
-            "top": 1.42544,
-            "bottom": 1.42472,
-            "start": "2026-11-27T01:45:00+00:00",
-            "touches": 2,
-            "age": 19
+            "top": 1.42387,
+            "bottom": 1.4234,
+            "start": "2026-11-27T07:00:00+00:00",
+            "touches": 0,
+            "age": 1
+          },
+          {
+            "kind": "ob",
+            "dir": "bull",
+            "top": 1.42255,
+            "bottom": 1.42202,
+            "start": "2026-11-26T09:15:00+00:00",
+            "touches": 8,
+            "age": 87
+          },
+          {
+            "kind": "ifvg",
+            "dir": "bear",
+            "top": 1.42424,
+            "bottom": 1.42398,
+            "start": "2026-11-27T05:15:00+00:00",
+            "touches": 3,
+            "age": 8
+          },
+          {
+            "kind": "ifvg",
+            "dir": "bull",
+            "top": 1.42218,
+            "bottom": 1.42112,
+            "start": "2026-11-26T03:00:00+00:00",
+            "touches": 10,
+            "age": 113
           }
         ],
         "levels": [
@@ -1688,22 +1688,22 @@
           },
           {
             "type": "ssl",
-            "price": 1.42286,
-            "start": "2026-11-27T05:30:00+00:00"
+            "price": 1.4219,
+            "start": "2026-11-26T14:15:00+00:00"
           },
           {
             "type": "ssl",
-            "price": 1.42264,
-            "start": "2026-11-27T03:00:00+00:00"
+            "price": 1.42176,
+            "start": "2026-11-26T07:30:00+00:00"
           }
         ],
         "structure": [
           {
-            "type": "CHoCH",
+            "type": "BOS",
             "dir": "bear",
-            "price": 1.42442,
-            "from": "2026-11-27T00:00:00+00:00",
-            "to": "2026-11-27T01:45:00+00:00"
+            "price": 1.42286,
+            "from": "2026-11-27T05:30:00+00:00",
+            "to": "2026-11-27T07:00:00+00:00"
           }
         ],
         "sweeps": []
@@ -1727,11 +1727,11 @@
   },
   "USDCHF": {
     "bias": "CONSOLIDATION",
-    "confidence": 0.39208080872900103,
+    "confidence": 0.3920808087290007,
     "probabilities": {
-      "UP": 0.27332281879828735,
-      "DOWN": 0.33459637247271157,
-      "CONSOLIDATION": 0.39208080872900103
+      "UP": 0.2733228187982873,
+      "DOWN": 0.334596372472712,
+      "CONSOLIDATION": 0.3920808087290007
     },
     "signals": [
       "Bull IFVG",
@@ -1921,8 +1921,8 @@
             "top": 0.83428,
             "bottom": 0.83414,
             "start": "2026-11-27T05:00:00+00:00",
-            "touches": 4,
-            "age": 4
+            "touches": 6,
+            "age": 7
           },
           {
             "kind": "fvg",
@@ -1930,17 +1930,8 @@
             "top": 0.8344,
             "bottom": 0.83421,
             "start": "2026-11-27T01:30:00+00:00",
-            "touches": 7,
-            "age": 18
-          },
-          {
-            "kind": "ob",
-            "dir": "bull",
-            "top": 0.83416,
-            "bottom": 0.83384,
-            "start": "2026-11-27T06:15:00+00:00",
-            "touches": 0,
-            "age": 0
+            "touches": 9,
+            "age": 21
           },
           {
             "kind": "fvg",
@@ -1949,47 +1940,56 @@
             "bottom": 0.83438,
             "start": "2026-11-25T08:30:00+00:00",
             "touches": 10,
-            "age": 182
+            "age": 185
           },
           {
-            "kind": "breaker",
+            "kind": "ob",
             "dir": "bull",
             "top": 0.83396,
-            "bottom": 0.83348,
-            "start": "2026-11-27T04:15:00+00:00",
-            "touches": 6,
-            "age": 9
+            "bottom": 0.83336,
+            "start": "2026-11-27T07:00:00+00:00",
+            "touches": 0,
+            "age": 0
           },
           {
             "kind": "fvg",
             "dir": "bull",
-            "top": 0.83354,
-            "bottom": 0.83328,
-            "start": "2026-11-26T14:30:00+00:00",
-            "touches": 6,
-            "age": 62
+            "top": 0.83327,
+            "bottom": 0.8332,
+            "start": "2026-11-26T14:15:00+00:00",
+            "touches": 1,
+            "age": 66
+          },
+          {
+            "kind": "breaker",
+            "dir": "bear",
+            "top": 0.83582,
+            "bottom": 0.8354,
+            "start": "2026-11-25T07:15:00+00:00",
+            "touches": 4,
+            "age": 192
           }
         ],
         "levels": [
+          {
+            "type": "bsl",
+            "price": 0.83431,
+            "start": "2026-11-27T06:30:00+00:00"
+          },
           {
             "type": "bsl",
             "price": 0.83449,
             "start": "2026-11-27T05:00:00+00:00"
           },
           {
-            "type": "bsl",
-            "price": 0.83516,
-            "start": "2026-11-27T01:00:00+00:00"
-          },
-          {
-            "type": "ssl",
-            "price": 0.83352,
-            "start": "2026-11-27T05:30:00+00:00"
-          },
-          {
             "type": "ssl",
             "price": 0.83324,
             "start": "2026-11-27T02:45:00+00:00"
+          },
+          {
+            "type": "ssl",
+            "price": 0.83259,
+            "start": "2026-11-26T14:15:00+00:00"
           }
         ],
         "structure": [],
@@ -1998,6 +1998,11 @@
             "dir": "bear",
             "price": 0.83516,
             "time": "2026-11-27T01:00:00+00:00"
+          },
+          {
+            "dir": "bull",
+            "price": 0.83336,
+            "time": "2026-11-27T07:00:00+00:00"
           }
         ]
       }
@@ -2007,24 +2012,24 @@
     "trade": {
       "action": "SHORT",
       "entry": 0.83481,
-      "stop_loss": 0.83533,
-      "take_profit": 0.83326,
-      "risk": 0.00052,
-      "reward": 0.00155,
-      "risk_reward": 3.01,
+      "stop_loss": 0.83545,
+      "take_profit": 0.83261,
+      "risk": 0.00064,
+      "reward": 0.0022,
+      "risk_reward": 3.46,
       "conviction": "Low",
-      "entry_type": "M15 FVG mid limit (model; P(fill)=0.48, EV=+0.25R; valid 16 15m bars)",
-      "stop_source": "beyond recent M15 swing high",
+      "entry_type": "M15 FVG mid limit (model; P(fill)=0.59, EV=+0.34R; valid 16 15m bars)",
+      "stop_source": "beyond zone",
       "target_source": "M15 swing low #2"
     }
   },
   "BTCUSD": {
     "bias": "DOWN",
-    "confidence": 0.530635960538959,
+    "confidence": 0.5306359605389589,
     "probabilities": {
-      "UP": 0.18695270888356846,
-      "DOWN": 0.530635960538959,
-      "CONSOLIDATION": 0.28241133057747253
+      "UP": 0.18695270888356857,
+      "DOWN": 0.5306359605389589,
+      "CONSOLIDATION": 0.2824113305774727
     },
     "signals": [
       "Bull Breaker",
@@ -2197,8 +2202,8 @@
             "top": 62025.0,
             "bottom": 61734.24,
             "start": "2026-11-27T06:00:00+00:00",
-            "touches": 1,
-            "age": 1
+            "touches": 4,
+            "age": 4
           },
           {
             "kind": "fvg",
@@ -2207,7 +2212,7 @@
             "bottom": 61532.98,
             "start": "2026-11-27T04:45:00+00:00",
             "touches": 0,
-            "age": 5
+            "age": 8
           },
           {
             "kind": "ob",
@@ -2216,7 +2221,7 @@
             "bottom": 61402.82,
             "start": "2026-11-27T04:45:00+00:00",
             "touches": 0,
-            "age": 6
+            "age": 9
           },
           {
             "kind": "fvg",
@@ -2225,7 +2230,7 @@
             "bottom": 60744.01,
             "start": "2026-11-27T01:45:00+00:00",
             "touches": 0,
-            "age": 17
+            "age": 20
           },
           {
             "kind": "ifvg",
@@ -2234,7 +2239,7 @@
             "bottom": 60670.01,
             "start": "2026-11-27T02:00:00+00:00",
             "touches": 0,
-            "age": 18
+            "age": 21
           },
           {
             "kind": "ifvg",
@@ -2243,19 +2248,24 @@
             "bottom": 60380.94,
             "start": "2026-11-26T20:00:00+00:00",
             "touches": 10,
-            "age": 42
+            "age": 45
           }
         ],
         "levels": [
           {
-            "type": "ssl",
-            "price": 61336.73,
-            "start": "2026-11-27T04:00:00+00:00"
+            "type": "bsl",
+            "price": 62025.0,
+            "start": "2026-11-27T06:00:00+00:00"
           },
           {
             "type": "ssl",
-            "price": 60614.0,
-            "start": "2026-11-27T01:45:00+00:00"
+            "price": 61644.38,
+            "start": "2026-11-27T06:15:00+00:00"
+          },
+          {
+            "type": "ssl",
+            "price": 61336.73,
+            "start": "2026-11-27T04:00:00+00:00"
           }
         ],
         "structure": [],
