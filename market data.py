@@ -987,42 +987,6 @@ def _clear_target(T: float, E: float, long: bool, bounds: list, buf: float):
     return T
 
 
-def _all_tf_bounds(Ps) -> list:
-    """Zone bounds from every timeframe (daily / H1 / M15) still valid at its latest bar, so a stop is
-    kept clear of a zone even when it was detected on a different timeframe than the one that made the pick."""
-    out = []
-    for P, t, age in Ps:
-        if P is None:
-            continue
-        for k in range(max(0, t - age), t + 1):
-            for z in P["Z"].get(k, ()):
-                if z["kind"] == "sweep" or (z["inv"] is not None and z["inv"] <= t):
-                    continue
-                if z["top"] > z["bottom"]:
-                    out.append((float(z["bottom"]), float(z["top"])))
-    return out
-
-
-def _final_clear(entry, stop, target, long, bounds, atr, sbuf, max_risk_atr=3.0, min_rr=1.0, max_zone_atr=1.5):
-    """Last pass over a finished pick, with guards so it can never wreck the risk/reward:
-    - only SMALL zones (<= max_zone_atr ATR tall) are cleared: a big zone cannot be 'engulfed' by a stop;
-    - the stop moves past one zone only if the risk stays <= max_risk_atr ATR and R:R stays >= min_rr;
-    - the target is pulled back before a zone only if at least min_rr x risk (and 0.5 ATR) of reward is left;
-    otherwise the original level is kept."""
-    small = [(b, tp) for b, tp in bounds if (tp - b) <= max_zone_atr * atr]
-    S, T = stop, target
-    S1 = _clear_stop(S, long, small, sbuf * atr)
-    if S1 != S:
-        risk1 = abs(entry - S1)
-        if risk1 <= max_risk_atr * atr and abs(T - entry) / risk1 >= min_rr:
-            S = S1
-    risk = abs(entry - S)
-    T1 = _clear_target(T, entry, long, small, ZONE_TARGET_BUF_ATR * atr)
-    if T1 is not None and T1 != T and abs(T1 - entry) >= max(0.5 * atr, min_rr * risk):
-        T = T1
-    return S, T
-
-
 def _candidates(P: dict, t: int, side: str, ctx: dict, level: int = 0) -> list:
     cfg = _cfg(P)
     max_dist, min_risk, max_risk, min_rr, max_rr = cfg["relax"][level]
@@ -1285,9 +1249,7 @@ def _fallback_candidate(P: dict, t: int, side: str):
     elif risk > 2.0 * atr:
         S = E - 2.0 * atr if long else E + 2.0 * atr
     bounds = _active_zone_bounds(P, t)
-    S1 = _clear_stop(S, long, bounds, cfg["stop_buf"] * atr)    # never inside a zone ...
-    if abs(E - S1) <= 2.5 * atr:                                 # ... unless that would blow the risk up
-        S = S1
+    S = _clear_stop(S, long, bounds, cfg["stop_buf"] * atr)     # never inside a zone (may exceed the 2 ATR clamp)
     risk = abs(E - S)
     tgt_sw = _live_swings(P, t, "sh" if long else "sl")
     tl = sorted([p for _, p in tgt_sw if (p > E + 0.3 * atr if long else p < E - 0.3 * atr)],
@@ -3425,18 +3387,6 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
                       f"→ using {chosen['hourly_meta']['timeframe']}")
                 pick = chosen
             entry, stop_loss, take_profit = pick['entry'], pick['stop'], pick['target']
-            _pP = m15_P if (HAS_M15 and pick['hourly_meta'].get('timeframe') == 'M15') else h1_P
-            _bnd = _all_tf_bounds([(h1_P, len(hourly_df) - 1, _cfg(h1_P)["zone_max_age"]),
-                                   (m15_P if HAS_M15 else None, (len(m15_df) - 1) if HAS_M15 else 0,
-                                    _cfg(m15_P)["zone_max_age"] if HAS_M15 else 0),
-                                   (d_P, d_i, 60)])
-            _atr_p = float(_pP["atr"][len(_pP["c"]) - 1])
-            if _atr_p > 0:
-                _s2, _t2 = _final_clear(entry, stop_loss, take_profit, side == 'LONG', _bnd, _atr_p,
-                                        _cfg(_pP)["stop_buf"])
-                if abs(_s2 - stop_loss) > 1e-12 or abs(_t2 - take_profit) > 1e-12:
-                    stop_loss, take_profit = _s2, _t2
-                    stop_src = stop_src + ' (cleared past zone)'
             entry_type, stop_src, target_src = pick['entry_type'], pick['stop_source'], pick['target_source']
             zone_strength = pick['score']
             hourly_meta = pick['hourly_meta']
