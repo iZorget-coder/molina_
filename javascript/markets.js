@@ -80,8 +80,10 @@ function formatCandleLabel(c, timeframe) {
   if (timeframe === '1H' || timeframe === '15m') {
     const d = new Date(c.time);
     if (isNaN(d.getTime())) return c.time || '';
-    const mins = timeframe === '15m' ? String(d.getUTCMinutes()).padStart(2, '0') : '00';
-    return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()} ${String(d.getUTCHours()).padStart(2, '0')}:${mins}`;
+    // SAST = UTC+2 (fixed, no DST). Shift then read UTC parts.
+    const sast = new Date(d.getTime() + 2 * 3600000);
+    const mins = timeframe === '15m' ? String(sast.getUTCMinutes()).padStart(2, '0') : '00';
+    return `${MONTHS[sast.getUTCMonth()]} ${sast.getUTCDate()} ${String(sast.getUTCHours()).padStart(2, '0')}:${mins}`;
   }
   if (!c.date) return '';
   const [, mo, day] = c.date.split('-').map(Number);
