@@ -8,7 +8,7 @@ which the markets page listens to and draws over the model's entry / stop / targ
 Source order per market:
   1. TradingView (tvkit) -- same futures symbols the daily pipeline uses, so prices line up
      with the levels the model produced.
-  2. Yahoo futures (ES=F, NQ=F, YM=F, GC=F) -- only if TradingView failed or is stale.
+  2. Yahoo futures (ES=F, NQ=F, YM=F, GC=F, EURUSD=X, CAD=X, CHF=X, BTC-USD) -- only if TradingView failed or is stale.
      Futures, not the cash indices, so the price basis matches TradingView's ES1!/NQ1!/YM1!.
 The document records which source each market used.
 """
@@ -32,6 +32,10 @@ MARKETS = {
     "NDX":    {"tv": "CME_MINI:NQ1!",  "yahoo": "NQ=F"},
     "DJI":    {"tv": "CBOT_MINI:YM1!", "yahoo": "YM=F"},
     "XAUUSD": {"tv": "OANDA:XAUUSD",   "yahoo": "GC=F"},
+    "EURUSD": {"tv": "OANDA:EURUSD",   "yahoo": "EURUSD=X"},
+    "USDCAD": {"tv": "OANDA:USDCAD",   "yahoo": "CAD=X"},
+    "USDCHF": {"tv": "OANDA:USDCHF",   "yahoo": "CHF=X"},
+    "BTCUSD": {"tv": "BITSTAMP:BTCUSD", "yahoo": "BTC-USD"},
 }
 
 
@@ -150,8 +154,8 @@ def build_market(key: str, cfg: dict):
         candles.append({
             # same text format as the CSV-based candles the page already has
             "time": str(ts),
-            "open": round(float(r.open), 4), "high": round(float(r.high), 4),
-            "low": round(float(r.low), 4), "close": round(float(r.close), 4),
+            "open": round(float(r.open), 6), "high": round(float(r.high), 6),
+            "low": round(float(r.low), 6), "close": round(float(r.close), 6),
             "partial": bool(ts.to_pydatetime() + timedelta(minutes=15) > now),   # bar still forming
         })
     print(f"  {source}: {len(candles)} bars, last {candles[-1]['time']} close {candles[-1]['close']}", flush=True)

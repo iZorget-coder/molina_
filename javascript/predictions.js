@@ -1,14 +1,23 @@
-import { collection, query, orderBy, limit, getDocs, doc, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs, getDocFromServer, doc, onSnapshot } from 'firebase/firestore';
 import { auth, onAuthStateChanged, db } from './firebase.js';
 
-/* ---------- The five markets the app supports ---------- */
+/* ---------- The markets the app supports ----------
+   decimals : price precision shown everywhere (FX pairs need 5, the rest 2)
+   weekends : trades every calendar day (Bitcoin), so weekend candles are real and the forecast day is simply tomorrow */
 export const MARKETS = [
-  { symbol: 'SPX',    name: 'S&P 500',         type: 'Index' },
-  { symbol: 'NDX',    name: 'NASDAQ',          type: 'Index' },
-  { symbol: 'DJI',    name: 'DOW JONES',       type: 'Index' },
-  { symbol: 'XAUUSD', name: 'Gold',            type: 'Commodity' },
-  { symbol: 'DXY',    name: 'US Dollar Index', type: 'FX' },
+  { symbol: 'SPX',    name: 'S&P 500',         type: 'Index',     decimals: 2 },
+  { symbol: 'NDX',    name: 'NASDAQ',          type: 'Index',     decimals: 2 },
+  { symbol: 'DJI',    name: 'DOW JONES',       type: 'Index',     decimals: 2 },
+  { symbol: 'XAUUSD', name: 'Gold',            type: 'Commodity', decimals: 2 },
+  { symbol: 'EURUSD', name: 'EUR/USD',         type: 'FX',        decimals: 5 },
+  { symbol: 'USDCAD', name: 'USD/CAD',         type: 'FX',        decimals: 5 },
+  { symbol: 'USDCHF', name: 'USD/CHF',         type: 'FX',        decimals: 5 },
+  { symbol: 'BTCUSD', name: 'Bitcoin',         type: 'Crypto',    decimals: 2, weekends: true },
+  { symbol: 'DXY',    name: 'US Dollar Index', type: 'FX',        decimals: 3 },
 ];
+
+/** Price decimals for a symbol (2 when unknown). */
+export const decimalsOf = (symbol) => MARKETS.find((m) => m.symbol === symbol)?.decimals ?? 2;
 
 /* ---------- Direction helpers ---------- */
 const DIRECTIONS = {
@@ -31,9 +40,9 @@ export function countDirections(data) {
 }
 
 /* ---------- Formatting ---------- */
-const formatPrice = (n) =>
+const formatPrice = (n, dp = 2) =>
   typeof n === 'number'
-    ? n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    ? n.toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp })
     : '—';
 
 export function formatChange(pct) {
@@ -72,11 +81,11 @@ export const formatDate = (iso) =>
     : '';
 
 
-export function nextTradingDay(iso) {
+export function nextTradingDay(iso, weekends = false) {
   const dt = utc(iso);
   do {
     dt.setUTCDate(dt.getUTCDate() + 1);
-  } while (dt.getUTCDay() === 0 || dt.getUTCDay() === 6);
+  } while (!weekends && (dt.getUTCDay() === 0 || dt.getUTCDay() === 6));
   return dt.toISOString().slice(0, 10);
 }
 
@@ -198,7 +207,8 @@ function normalise(docId, data, olderPredictions) {
   candles: Array.isArray(p?.candles) ? p.candles : [],
   candlesH1: Array.isArray(p?.candlesH1) ? p.candlesH1 : [],
   change,
-  price: formatPrice(close),
+  price: formatPrice(close, m.decimals ?? 2),
+  forecastDay: closeDate ? nextTradingDay(closeDate, Boolean(m.weekends)) : null,
   changeText: formatChange(change),
   label: hasForecast
     ? `${direction.arrow} ${direction.label}${confidence !== null ? ` ${confidence}%` : ''}`
@@ -206,10 +216,11 @@ function normalise(docId, data, olderPredictions) {
 };
   }
 
-  const closeDates = Object.values(raw)
-    .map(p => p?.date)
-    .filter(Boolean)
-    .sort();
+  // Bitcoin trades on weekends, so its close date can run ahead of the other markets'.
+  // The page-wide "Forecasts for ..." day follows the weekday markets whenever any of them has data.
+  const datesOf = (list) => list.map(m => raw[m.symbol]?.date).filter(Boolean).sort();
+  const weekdayDates = datesOf(MARKETS.filter(m => !m.weekends));
+  const closeDates = weekdayDates.length ? weekdayDates : datesOf(MARKETS);
 
   const closeDate = closeDates.length
     ? closeDates[closeDates.length - 1]
@@ -291,18 +302,109 @@ function normaliseLive(data, symbol) {
   };
 }
 
+/*
+ * One live feed (live_hourly / live_fifteen) for one symbol.
+ *
+ * A plain onSnapshot goes quiet in a few real situations: a phone or laptop that slept, a background
+ * tab the browser froze, a dropped network, a websocket a proxy closed. The page then keeps the old
+ * candle until it is reloaded. So on top of the listener this:
+ *   - re-reads the document from the server when the tab becomes visible again / the network is back,
+ *   - restarts the listener if the page was restored from the back-forward cache,
+ *   - runs a watchdog: if the feed is overdue (the workflow should have written by now) it polls the
+ *     server every 30 s until something new arrives,
+ *   - only calls onData when the document actually changed (same updated_at = no repaint).
+ */
+const FEED_CADENCE_MS = { live_hourly: 60 * 60 * 1000, live_fifteen: 15 * 60 * 1000 };
+const OVERDUE_GRACE_MS = 90 * 1000;     // workflow runtime + cron-job.org jitter
+const WATCHDOG_MS = 30 * 1000;
+
 function subscribeLive(collectionName, symbol, onData, onError) {
+  const ref = () => doc(db, collectionName, 'latest');
+  const cadence = FEED_CADENCE_MS[collectionName] ?? 15 * 60 * 1000;
   let stopped = false;
-  let unsub = () => {};
+  let unsub = null;
+  let timer = null;
+  let lastStamp = null;      // updated_at (ms) of the last snapshot delivered, or 'none'
+  let lastSeen = Date.now(); // when we last heard from the server
+
+  const stampOf = (snap) => {
+    if (!snap.exists()) return 'none';
+    const u = snap.data()?.updated_at;
+    return u?.toMillis ? u.toMillis() : 'unknown';
+  };
+
+  const deliver = (snap) => {
+    if (stopped) return;
+    lastSeen = Date.now();
+    const stamp = stampOf(snap);
+    if (stamp !== 'unknown' && stamp === lastStamp) return;     // nothing new
+    lastStamp = stamp;
+    onData(snap.exists() ? normaliseLive(snap.data(), symbol) : null);
+  };
+
+  const listen = () => {
+    if (stopped || unsub) return;
+    unsub = onSnapshot(
+      ref(),
+      (snap) => deliver(snap),
+      (err) => {
+        console.warn(`Live feed unavailable (${collectionName})`, err);
+        unsub = null;                                            // allow a restart on the next wake-up
+        onError?.(err);
+      }
+    );
+  };
+
+  const restart = () => {
+    if (unsub) { unsub(); unsub = null; }
+    listen();
+  };
+
+  // one direct server read: bypasses a silently dead listener and the local cache
+  const pull = async () => {
+    if (stopped) return;
+    try {
+      const snap = await getDocFromServer(ref());
+      deliver(snap);
+    } catch (err) {
+      console.debug(`Live feed pull failed (${collectionName})`, err);
+    }
+  };
+
+  const wake = () => {
+    if (stopped || document.visibilityState === 'hidden') return;
+    restart();
+    pull();
+  };
+
+  const watchdog = () => {
+    if (stopped || document.visibilityState === 'hidden') return;
+    const stampMs = typeof lastStamp === 'number' ? lastStamp : lastSeen;
+    if (Date.now() - stampMs > cadence + OVERDUE_GRACE_MS) pull();
+  };
+
+  const onVisibility = () => { if (document.visibilityState === 'visible') wake(); };
+  const onPageShow = (e) => { if (e.persisted) wake(); };
+
   authReady.then(() => {
     if (stopped) return;
-    unsub = onSnapshot(
-      doc(db, collectionName, 'latest'),
-      (snap) => onData(snap.exists() ? normaliseLive(snap.data(), symbol) : null),
-      (err) => { console.warn(`Live feed unavailable (${collectionName})`, err); onError?.(err); }
-    );
+    listen();
+    pull();
+    timer = setInterval(watchdog, WATCHDOG_MS);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pageshow', onPageShow);
+    window.addEventListener('online', wake);
   });
-  return () => { stopped = true; unsub(); };
+
+  return () => {
+    stopped = true;
+    if (unsub) unsub();
+    unsub = null;
+    clearInterval(timer);
+    document.removeEventListener('visibilitychange', onVisibility);
+    window.removeEventListener('pageshow', onPageShow);
+    window.removeEventListener('online', wake);
+  };
 }
 
 /** Calls onData(liveOrNull) now and after every hourly update. Returns an unsubscribe function. */

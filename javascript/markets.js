@@ -1,4 +1,4 @@
-import { MARKETS, fetchLatestPredictions, formatLong, subscribeLiveHourly, subscribeLiveFifteen } from './predictions.js';
+import { MARKETS, decimalsOf, fetchLatestPredictions, formatLong, subscribeLiveHourly, subscribeLiveFifteen } from './predictions.js';
 import { zoneKey, zoneRgb } from './zones.js';
 
 const STORAGE_KEY = 'molina:market';
@@ -9,6 +9,10 @@ const DESCRIPTIONS = {
   NDX: 'NASDAQ index',
   DJI: 'Dow Jones Industrial Average',
   XAUUSD: 'Gold spot / US dollar',
+  EURUSD: 'Euro / US dollar',
+  USDCAD: 'US dollar / Canadian dollar',
+  USDCHF: 'US dollar / Swiss franc',
+  BTCUSD: 'Bitcoin / US dollar',
   DXY: 'US Dollar Index',
 };
 
@@ -55,12 +59,20 @@ function setText(id, text) {
   if (el) el.textContent = text;
 }
 
-const fmt = (n) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// price text: decimals follow the market on screen (FX pairs 5, the rest 2) unless given
+const fmt = (n, dp) => {
+  const d = dp ?? decimalsOf(currentSymbol ?? selectedSymbol());
+  return n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+};
+
+const isFx = (symbol) => MARKETS.find((m) => m.symbol === symbol)?.type === 'FX' && decimalsOf(symbol) === 5;
 
 const level = (symbol, n) => (n === null ? '—' : `${LEVEL_PREFIX[symbol] || ''}${fmt(n)}`);
 
 const distance = (symbol, n) =>
-  n === null ? '—' : LEVEL_PREFIX[symbol] ? `${LEVEL_PREFIX[symbol]}${fmt(n)}` : `${fmt(n)} pts`;
+  n === null ? '—'
+    : isFx(symbol) ? `${(n / 0.0001).toFixed(1)} pips`
+    : LEVEL_PREFIX[symbol] ? `${LEVEL_PREFIX[symbol]}${fmt(n)}` : `${fmt(n)} pts`;
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -97,10 +109,10 @@ export function liveHeaderPrice(m, live) {
   const last = candles.reduce((a, c) => (toMs(c.time) > toMs(a.time) ? c : a), candles[0]);
   const ms = toMs(last.time);
   if (!Number.isFinite(ms) || !Number.isFinite(last.close) || last.close <= 0) return null;
-  if (tradingDay(ms) <= m.closeDate) return null;
+  if (tradingDay(ms, m.weekends) <= m.closeDate) return null;
   const change = (last.close / m.close - 1) * 100;
   const v = Math.round(change * 100) / 100;
-  return { price: fmt(last.close), change, changeText: `${v < 0 ? '-' : '+'}${Math.abs(v).toFixed(2)}%` };
+  return { price: fmt(last.close, m.decimals ?? decimalsOf(m.symbol)), change, changeText: `${v < 0 ? '-' : '+'}${Math.abs(v).toFixed(2)}%` };
 }
 
 function paintHeader(symbol, m) {
@@ -152,7 +164,7 @@ function paintPrediction(symbol, m, live) {
   setText(
     'pred-sub',
     has
-      ? `Forecast for ${formatLong(live.forecastDay)} · daily model${conviction ? ` · ${conviction} conviction` : ''}`
+      ? `Forecast for ${formatLong(m.forecastDay ?? live.forecastDay)} · daily model${conviction ? ` · ${conviction} conviction` : ''}`
       : 'Waiting for the next daily run'
   );
 
@@ -378,7 +390,7 @@ function freshestLive() {
 }
 
 /** Trading day of an hour (futures reopen ~22:00-23:00 UTC, so +2h puts that open on the next day). */
-const tradingDay = (ms) => new Date(ms + 2 * 3600000).toISOString().slice(0, 10);
+const tradingDay = (ms, weekends = false) => new Date(ms + (weekends ? 0 : 2) * 3600000).toISOString().slice(0, 10);
 
 /**
  * Daily candles + the days the live hourly candles add or extend.
@@ -387,7 +399,7 @@ const tradingDay = (ms) => new Date(ms + 2 * 3600000).toISOString().slice(0, 10)
  * - older stored days are left exactly as the daily pipeline saved them.
  * The candle for a day that is still trading is flagged `partial` (drawn dotted).
  */
-export function mergeDaily(raw, live) {
+export function mergeDaily(raw, live, weekends = false) {
   const daily = (Array.isArray(raw) ? raw : []).map((c) => ({ ...c }));
   if (!live?.candles?.length) return daily;
 
@@ -397,7 +409,7 @@ export function mergeDaily(raw, live) {
     .filter((c) => Number.isFinite(c.ms))
     .sort((a, b) => a.ms - b.ms)
     .forEach((c) => {
-      const d = tradingDay(c.ms);
+      const d = tradingDay(c.ms, weekends);
       const a = days.get(d);
       if (!a) days.set(d, { date: d, open: c.open, high: c.high, low: c.low, close: c.close, partial: Boolean(c.partial), live: true });
       else {
@@ -419,7 +431,7 @@ export function mergeDaily(raw, live) {
       const t = Date.parse(daily[i].date);
       if (!Number.isFinite(t)) continue;
       const dow = new Date(t).getUTCDay();
-      if (t >= cut || ((dow === 0 || dow === 6) && t >= cut - 3 * 86400000)) daily.splice(i, 1);
+      if (t >= cut || (!weekends && (dow === 0 || dow === 6) && t >= cut - 3 * 86400000)) daily.splice(i, 1);
     }
   }
   const lastStored = daily.map((c) => c.date).filter(Boolean).sort().pop() || '';
@@ -428,7 +440,7 @@ export function mergeDaily(raw, live) {
     const a = days.get(d);
     if (d > lastStored) {
       const dow = new Date(`${d}T00:00:00Z`).getUTCDay();
-      if (dow !== 0 && dow !== 6) daily.push(a);       // never a weekend candle
+      if (weekends || (dow !== 0 && dow !== 6)) daily.push(a);       // never a weekend candle (except Bitcoin)
     } else if (d === lastStored && d === newest) {
       const c = daily.find((x) => x.date === d);
       if (c) {
@@ -445,8 +457,9 @@ export function mergeDaily(raw, live) {
 
 /** Index / gold futures have no Saturday or Sunday session. A weekend-dated daily candle is only the
  *  first hour or two of Sunday evening's open, so it is dropped (that hour belongs to Monday's candle). */
-export const dropWeekendDays = (arr) =>
+export const dropWeekendDays = (arr, keepWeekends = false) =>
   (Array.isArray(arr) ? arr : []).filter((c) => {
+    if (keepWeekends) return true;
     const t = Date.parse(c?.date);
     if (!Number.isFinite(t)) return true;
     const dow = new Date(t).getUTCDay();
@@ -456,8 +469,9 @@ export const dropWeekendDays = (arr) =>
 /** Cleaned candles for a timeframe ('1D' | '1H' | '15m'), with the live feeds merged in. */
 function chartRows(m, tf) {
   if (tf === '1D') {
-    const daily = liveData ? mergeDaily(m?.candles, liveData) : m?.candles;
-    return cleanCandles(dropWeekendDays(daily), '1D');
+    const wk = Boolean(m?.weekends);
+    const daily = liveData ? mergeDaily(m?.candles, liveData, wk) : m?.candles;
+    return cleanCandles(dropWeekendDays(daily, wk), '1D');
   }
   if (tf === '15m') {
     // there are no stored 15-minute candles: the chart is the live_fifteen feed
@@ -509,7 +523,8 @@ function tradeStatus() {
   if ((!liveData && !liveFifteen) || !t || !forecastDayIso) return null;
   // 15-minute candles give the most precise fill / stop / target check; hourly is the fallback
   const { rows } = chartRows(currentMarket, liveFifteen ? '15m' : '1H');
-  return evaluateTrade(t, rows, Date.parse(`${forecastDayIso}T00:00:00Z`));
+  const day = currentMarket.forecastDay ?? forecastDayIso;
+  return evaluateTrade(t, rows, Date.parse(`${day}T00:00:00Z`));
 }
 
 const signedR = (r) => `${r >= 0 ? '+' : '-'}${Math.abs(r).toFixed(1)}R`;
@@ -521,7 +536,7 @@ function paintTradeStatus() {
   if (!st) { el.hidden = true; return; }
   const text = {
     pending: () => 'Waiting for the first hourly candle of the forecast day',
-    waiting: () => `Limit order waiting · price ${fmt(st.price)}, ${fmt(st.away)} pts from entry`,
+    waiting: () => `Limit order waiting · price ${fmt(st.price)}, ${distance(currentSymbol, st.away)} from entry`,
     open: () => `Filled · open ${signedR(st.r)} · price ${fmt(st.price)}`,
     target: () => `Target reached · ${signedR(st.r)}`,
     stopped: () => 'Stopped out · -1.0R',
@@ -608,6 +623,8 @@ function buildSmcOverlay({ set, candles, isH1, ageUnit, PAD, plotW, plotH, plotR
       const i = idxAt(z.start);
       if (i === null) return;
       const bull = z.dir === 'bull';
+      // a zone that a later candle has closed through is used up: it is not drawn
+      if (candles.slice(i + 1).some((c) => (bull ? c.close < z.bottom : c.close > z.top))) return;
       const rgb = zoneRgb(zoneKey(z.kind));
       const yT = y(Math.min(z.top, hi));
       const yB = y(Math.max(z.bottom, lo));
@@ -895,7 +912,7 @@ function paintChart() {
   /* ----- SMC overlay: zones / lines sit behind the candles ----- */
   if (smcState.on && m?.smc) {
     const ov = buildSmcOverlay({
-      set: m.smc[tf === '15m' ? 'm15' : isH1 ? 'h1' : 'daily'] ?? (tf === '15m' ? m.smc.h1 : null), candles, isH1, ageUnit: tf === '15m' ? '×15m' : undefined,
+      set: m.smc[tf === '15m' ? 'm15' : isH1 ? 'h1' : 'daily'], candles, isH1, ageUnit: tf === '15m' ? '×15m' : undefined,
       PAD, plotW, plotH, plotRight, barW, y, lo, hi, layers: smcState.layers,
     });
     html += ov.back;
@@ -903,7 +920,9 @@ function paintChart() {
     const parts = [];
     if (ov.zones) parts.push(`${ov.zones} zone${ov.zones === 1 ? '' : 's'}`);
     if (ov.levels) parts.push(`${ov.levels} level${ov.levels === 1 ? '' : 's'}`);
-    setText('smc-note', parts.length ? parts.join(' · ') : 'Nothing to draw in view');
+    setText('smc-note', tf === '15m' && !m.smc.m15
+      ? '15m zones appear after the next model run'
+      : parts.length ? parts.join(' · ') : 'Nothing to draw in view');
   }
 
   /* ----- Candles (now end before the right gutter) ----- */

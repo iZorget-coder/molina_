@@ -16,6 +16,11 @@ TICKER_MAP = {
     "NASDAQ_1d_data.csv": ("^IXIC", "NASDAQ100_index_H1.csv", "NASDAQ:IXIC"),
     "DOW_1d_data.csv":    ("^DJI",  "DOW_index_H1.csv",       "DJ:DJI"),
     "XAUUSD_1d_data.csv": ("GC=F",  "XAUUSD_H1.csv",          "COMEX:GC1!"),
+    # FX pairs and Bitcoin: same TradingView symbols the hourly / 15-minute fetchers use
+    "EURUSD_1d_data.csv": ("EURUSD=X", "EURUSD_H1.csv", "OANDA:EURUSD"),
+    "USDCAD_1d_data.csv": ("CAD=X",    "USDCAD_H1.csv", "OANDA:USDCAD"),
+    "USDCHF_1d_data.csv": ("CHF=X",    "USDCHF_H1.csv", "OANDA:USDCHF"),
+    "BTCUSD_1d_data.csv": ("BTC-USD",  "BTCUSD_H1.csv", "BITSTAMP:BTCUSD"),
 }
 
 # Map daily CSV -> 15-minute CSV (same market, different granularity)
@@ -24,6 +29,10 @@ FIFTEEN_MAP = {
     "NASDAQ_1d_data.csv": ("^IXIC", "NASDAQ100_15m.csv", "NASDAQ:IXIC"),
     "DOW_1d_data.csv":    ("^DJI",  "DOW_15m.csv",       "DJ:DJI"),
     "XAUUSD_1d_data.csv": ("GC=F",  "XAUUSD_15m.csv",    "COMEX:GC1!"),
+    "EURUSD_1d_data.csv": ("EURUSD=X", "EURUSD_15m.csv", "OANDA:EURUSD"),
+    "USDCAD_1d_data.csv": ("CAD=X",    "USDCAD_15m.csv", "OANDA:USDCAD"),
+    "USDCHF_1d_data.csv": ("CHF=X",    "USDCHF_15m.csv", "OANDA:USDCHF"),
+    "BTCUSD_1d_data.csv": ("BTC-USD",  "BTCUSD_15m.csv", "BITSTAMP:BTCUSD"),
 }
 
 # ── 15-minute data replaces the OHLC of each newly appended daily candle ──────────────
@@ -37,7 +46,12 @@ USE_15M_FOR_DAILY = True
 USE_15M_VOLUME    = False   # True = Volume becomes the sum of the 15-minute volumes (can differ in scale)
 MIN_15M_BARS = {            # a normal session has ~26 bars for the indices and ~92 for gold
     "SP500_15m.csv": 20, "NASDAQ100_15m.csv": 20, "DOW_15m.csv": 20, "XAUUSD_15m.csv": 60,
+    "EURUSD_15m.csv": 60, "USDCAD_15m.csv": 60, "USDCHF_15m.csv": 60, "BTCUSD_15m.csv": 80,
 }
+# Hours added to a bar's UTC time to find its trading day. Indices / gold / FX reopen ~22:00 UTC, so +2h
+# rolls that open into the next date. Bitcoin trades 24/7 and its daily candle is a plain UTC day.
+DAY_OFFSET_HOURS = {"BTCUSD_15m.csv": 0}
+DEFAULT_DAY_OFFSET_HOURS = 2
 MAX_15M_VS_SOURCE_PCT = 2.0  # skip the replacement if the 15m close is further than this from the source close
 MAX_15M_GAP_HOURS     = 3    # skip if the day's bars have a hole bigger than this
 
@@ -239,7 +253,8 @@ def daily_from_15m(csv_15m, date_str, ref_close=None):
             return None
         m["timestamp"] = pd.to_datetime(m["timestamp"], utc=True)
         day = pd.to_datetime(date_str).date()
-        m = m[(m["timestamp"] + pd.Timedelta(hours=2)).dt.date == day].sort_values("timestamp")
+        off = DAY_OFFSET_HOURS.get(os.path.basename(csv_15m), DEFAULT_DAY_OFFSET_HOURS)
+        m = m[(m["timestamp"] + pd.Timedelta(hours=off)).dt.date == day].sort_values("timestamp")
         m = m.dropna(subset=["open", "high", "low", "close"])
 
         need = MIN_15M_BARS.get(os.path.basename(csv_15m), 20)

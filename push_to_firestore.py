@@ -21,6 +21,10 @@ DAILY_FILES = {
     "NDX":    "NASDAQ_1d_data.csv",
     "DJI":    "DOW_1d_data.csv",
     "XAUUSD": "XAUUSD_1d_data.csv",
+    "EURUSD": "EURUSD_1d_data.csv",
+    "USDCAD": "USDCAD_1d_data.csv",
+    "USDCHF": "USDCHF_1d_data.csv",
+    "BTCUSD": "BTCUSD_1d_data.csv",
 }
 
 HOURLY_FILES = {
@@ -28,6 +32,10 @@ HOURLY_FILES = {
     "NDX":    "NASDAQ100_index_H1.csv",
     "DJI":    "DOW_index_H1.csv",
     "XAUUSD": "XAUUSD_H1.csv",
+    "EURUSD": "EURUSD_H1.csv",
+    "USDCAD": "USDCAD_H1.csv",
+    "USDCHF": "USDCHF_H1.csv",
+    "BTCUSD": "BTCUSD_H1.csv",
 }
 
 
@@ -123,7 +131,13 @@ for symbol in predictions:
     _check_order(symbol, "daily",  predictions[symbol]["candles"],   "date")
     _check_order(symbol, "hourly", predictions[symbol]["candlesH1"], "time")
 
-data_date = next(iter(predictions.values()))["date"]
+if not predictions:
+    raise SystemExit("[error] predictions.json is empty - the model produced no markets, nothing to push")
+
+# Bitcoin trades on weekends, so its latest daily date can be later than the other markets'.
+# The document id follows the weekday markets so a weekend doesn't shift it.
+_weekday_dates = [p["date"] for k, p in predictions.items() if k != "BTCUSD" and p.get("date")]
+data_date = max(_weekday_dates) if _weekday_dates else next(iter(predictions.values()))["date"]
 
 doc_ref = db.collection("daily_predictions").document(data_date)
 doc_ref.set({

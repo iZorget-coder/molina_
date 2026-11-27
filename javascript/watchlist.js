@@ -483,7 +483,37 @@ function renderDashboardCards(symbols) {
 
 /* ---------- Add-market modal ---------- */
 
+/**
+ * The add-market dialog is static HTML. Any market in MARKETS that has no row yet (the FX pairs and
+ * Bitcoin) gets one, cloned from the first row so it looks identical. DXY is left out (no model).
+ */
+function ensureModalRows(dialog) {
+  const existing = dialog.querySelectorAll('.add-modal__row');
+  const tpl = existing[0];
+  const tplMeta = tpl && MARKETS.find(m => m.symbol === tpl.dataset.symbol);
+  if (!tpl || !tplMeta) return;
+
+  const have = new Set(Array.from(existing, r => r.dataset.symbol));
+  let after = existing[existing.length - 1];
+  const swap = (html, from, to) => html.split(from).join(to).split(from.replace(/&/g, '&amp;')).join(to.replace(/&/g, '&amp;'));
+
+  MARKETS.filter(m => m.symbol !== 'DXY' && !have.has(m.symbol)).forEach(m => {
+    const row = tpl.cloneNode(true);
+    let html = row.innerHTML;
+    html = swap(html, tplMeta.name, m.name);
+    html = swap(html, tplMeta.symbol, m.symbol);
+    html = swap(html, tplMeta.type, m.type);
+    row.innerHTML = html;
+    row.dataset.symbol = m.symbol;
+    const input = row.querySelector('input');
+    if (input) { input.value = m.symbol; input.checked = false; input.disabled = false; }
+    after.insertAdjacentElement('afterend', row);
+    after = row;
+  });
+}
+
 function renderModalRows(dialog, currentSymbols) {
+  ensureModalRows(dialog);
   const rows = dialog.querySelectorAll('.add-modal__row');
   rows.forEach(row => {
     const symbol = row.dataset.symbol;

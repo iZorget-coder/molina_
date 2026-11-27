@@ -28,6 +28,10 @@ INDEX_CONFIGS = [
     ("NASDAQ_1d_data.csv", "NASDAQ"),
     ("DOW_1d_data.csv",    "DOW JONES"),
     ("XAUUSD_1d_data.csv", "GOLD (XAUUSD)"),
+    ("EURUSD_1d_data.csv", "EUR/USD"),
+    ("USDCAD_1d_data.csv", "USD/CAD"),
+    ("USDCHF_1d_data.csv", "USD/CHF"),
+    ("BTCUSD_1d_data.csv", "BITCOIN (BTCUSD)"),
 ]
 
 
@@ -36,7 +40,22 @@ MARKET_KEY_MAP = {
     "NASDAQ":        "NDX",
     "DOW JONES":     "DJI",
     "GOLD (XAUUSD)": "XAUUSD",
+    "EUR/USD":       "EURUSD",
+    "USD/CAD":       "USDCAD",
+    "USD/CHF":       "USDCHF",
+    "BITCOIN (BTCUSD)": "BTCUSD",
 }
+
+# Price decimals written to predictions.json (FX pairs need 5, indices / gold / bitcoin 2).
+PRICE_DECIMALS = {"EUR/USD": 5, "USD/CAD": 5, "USD/CHF": 5}
+# Markets that trade every calendar day (the forecast day is simply the next day, weekends included).
+TRADES_WEEKENDS = {"BITCOIN (BTCUSD)"}
+_PX_DEC = 2      # set per market at the start of run_single_index
+
+
+def price_round(v):
+    """Round a price to the current market's precision (2 decimals would flatten an FX pair)."""
+    return round(float(v), _PX_DEC)
 
 DXY_CSV_PATH = "DXY_1d_data.csv"
 
@@ -45,6 +64,10 @@ HOURLY_CONFIGS = {
     "NASDAQ":        "NASDAQ100_index_H1.csv",
     "DOW JONES":     "DOW_index_H1.csv",
     "GOLD (XAUUSD)": "XAUUSD_H1.csv",
+    "EUR/USD":       "EURUSD_H1.csv",
+    "USD/CAD":       "USDCAD_H1.csv",
+    "USD/CHF":       "USDCHF_H1.csv",
+    "BITCOIN (BTCUSD)": "BTCUSD_H1.csv",
 }
 
 # H1 learned-model fields (per-symbol tv_symbol, csv_symbol_tag)
@@ -53,6 +76,10 @@ HOURLY_FALLBACK = {
     "NASDAQ":        ("CME_MINI:NQ1!",  "USATECH"),
     "DOW JONES":     ("CBOT_MINI:YM1!", "USA30"),
     "GOLD (XAUUSD)": ("OANDA:XAUUSD",   "XAUUSD"),
+    "EUR/USD":       ("OANDA:EURUSD",   "EURUSD"),
+    "USD/CAD":       ("OANDA:USDCAD",   "USDCAD"),
+    "USD/CHF":       ("OANDA:USDCHF",   "USDCHF"),
+    "BITCOIN (BTCUSD)": ("BITSTAMP:BTCUSD", "BTCUSD"),
 }
 
 # --- Displayed confidence -------------------------------------------------------------------
@@ -82,6 +109,10 @@ M15_CONFIGS = {
     "NASDAQ":        "NASDAQ100_15m.csv",
     "DOW JONES":     "DOW_15m.csv",
     "GOLD (XAUUSD)": "XAUUSD_15m.csv",
+    "EUR/USD":       "EURUSD_15m.csv",
+    "USD/CAD":       "USDCAD_15m.csv",
+    "USD/CHF":       "USDCHF_15m.csv",
+    "BITCOIN (BTCUSD)": "BTCUSD_15m.csv",
 }
 
 HOURLY_OPT_ENABLED         = True
@@ -480,7 +511,7 @@ def smc_export(P: dict, t: int, times, fmt, close: float, max_age: int, n_zones:
     recent liquidity sweeps. Times go through `fmt(times[i])` so the front end can place them."""
     atr = float(P["atr"][t]) if float(P["atr"][t]) > 0 else max(close * 0.003, 1e-9)
     hh, ll = P["h"], P["l"]
-    r2 = lambda v: round(float(v), 2)
+    r2 = price_round
     cand, sweeps = [], []
     for k in range(max(0, t - max_age), t + 1):
         for z in P["Z"].get(k, ()):
@@ -2317,9 +2348,9 @@ def _apply_calibration(trade: dict, close: float, atr: float, params) -> dict:
     t1 = e1 + sgn * d_t * ts
     risk, reward = abs(e1 - s1), abs(t1 - e1)
     new = dict(trade)
-    new['entry'] = round(e1, 2)
-    new['stop_loss'] = round(s1, 2)
-    new['take_profit'] = round(t1, 2)
+    new['entry'] = price_round(e1)
+    new['stop_loss'] = price_round(s1)
+    new['take_profit'] = price_round(t1)
     new['risk_reward'] = round(reward / risk, 2) if risk > 0 else None
     new['stop_source'] = f"{trade.get('stop_source', '')} +{extra:.2f} ATR (journal)"
     new['target_source'] = f"{trade.get('target_source', '')} x{ts:.2f} (journal)"
@@ -2438,6 +2469,9 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
     print("\n\n" + "#"*80)
     print(f"#  PROCESSING: {index_name}  ({csv_path})")
     print("#"*80)
+
+    global _PX_DEC
+    _PX_DEC = PRICE_DECIMALS.get(index_name, 2)
 
     if not os.path.exists(csv_path):
         print(f"⚠️  Skipping {index_name}: file not found at {csv_path}")
@@ -3025,6 +3059,8 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
         future = df_all[df_all['Date'] > after_date]
         if len(future):
             return future['Date'].iloc[0]
+        if index_name in TRADES_WEEKENDS:
+            return after_date + pd.Timedelta(days=1)
         return after_date + pd.offsets.BDay(1)
 
     _DIR_ICON = {'UP': '🟢 UP', 'DOWN': '🔴 DOWN', 'CONSOLIDATION': '🟡 CONSOLIDATION'}
@@ -3111,14 +3147,14 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
             hourly_meta['daily_rr'] = actual_rr
         return {
             'action': side, 'entry_type': entry_type, 'entry_style': ob_style,
-            'entry': round(entry, 2), 'stop_loss': round(stop_loss, 2),
-            'stop_source': stop_src, 'take_profit': round(take_profit, 2),
+            'entry': price_round(entry), 'stop_loss': price_round(stop_loss),
+            'stop_source': stop_src, 'take_profit': price_round(take_profit),
             'target_source': target_src, 'risk_reward': actual_rr,
             'confidence': confidence, 'conviction': conviction,
             'zone': 'Discount' if zone_pos < 0.5 else 'Premium',
             'zone_strength': zone_strength,
             'reason': f"{side} — {dominant} at {confidence:.1%}",
-            'hourly_meta': hourly_meta, 'daily_entry': round(close, 2),
+            'hourly_meta': hourly_meta, 'daily_entry': price_round(close),
             'daily_rr': actual_rr, 'bias_gate_passed': True,
             'dol_target': np.nan, 'dol_source': '', 'dol_rank': np.nan,
             'stop_anchor': stop_anchor, 'target_anchor': target_anchor,
@@ -3462,8 +3498,8 @@ def _trade_for_json(trade: dict) -> dict:
         "entry":        entry,
         "stop_loss":    stop,
         "take_profit":  target,
-        "risk":         round(abs(entry - stop), 2) if entry is not None and stop is not None else None,
-        "reward":       round(abs(target - entry), 2) if entry is not None and target is not None else None,
+        "risk":         round(abs(entry - stop), 6) if entry is not None and stop is not None else None,
+        "reward":       round(abs(target - entry), 6) if entry is not None and target is not None else None,
         "risk_reward":  _json_num(trade.get('risk_reward')),
         "conviction":   trade.get('conviction'),
         "entry_type":   trade.get('entry_type'),
