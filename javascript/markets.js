@@ -997,9 +997,21 @@ function paintChart() {
   });
 
   // live markers: where the order filled and where it exited
-  const st = isH1 ? tradeStatus() : null;
+  const st = tradeStatus();
   if (st && t) {
-    const at = (time) => candles.findIndex((c) => toMs(c.time) === toMs(time));
+    // fill / exit times come from the 15m (or hourly) bars, so on the 1H and 1D charts the marker goes on
+    // the candle that CONTAINS that time, not one with exactly the same timestamp
+    const at = (time) => {
+      const ms = toMs(time);
+      if (!Number.isFinite(ms)) return -1;
+      if (tf === '1D') {
+        const day = tradingDay(ms, Boolean(m?.weekends));
+        return candles.findIndex((c) => c.date === day);
+      }
+      const span = tf === '1H' ? 3600000 : 900000;
+      const start = Math.floor(ms / span) * span;
+      return candles.findIndex((c) => toMs(c.time) === start);
+    };
     const mark = (time, price, color, label) => {
       const i = at(time);
       if (i < 0 || price < lo || price > hi) return;
