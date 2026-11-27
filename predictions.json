@@ -1,11 +1,11 @@
 {
   "SPX": {
     "bias": "CONSOLIDATION",
-    "confidence": 0.3789112928046549,
+    "confidence": 0.378911292804655,
     "probabilities": {
-      "UP": 0.3346418782587543,
-      "DOWN": 0.28644682893659085,
-      "CONSOLIDATION": 0.3789112928046549
+      "UP": 0.3346418782587542,
+      "DOWN": 0.28644682893659074,
+      "CONSOLIDATION": 0.378911292804655
     },
     "signals": [
       "Bull Breaker",
@@ -339,11 +339,11 @@
     "trade": {
       "action": "LONG",
       "entry": 7172.0,
-      "stop_loss": 7042.39,
+      "stop_loss": 7120.64,
       "take_profit": 7272.15,
-      "risk": 129.61,
+      "risk": 51.36,
       "reward": 100.15,
-      "risk_reward": 0.77,
+      "risk_reward": 1.95,
       "conviction": "Low",
       "entry_type": "H1 BREAKER edge limit (heuristic; zone strength 0.51; relaxed filters L2; valid 8 H1 bars)",
       "stop_source": "beyond zone (clear of other zones)",
@@ -362,9 +362,9 @@
     "bias": "DOWN",
     "confidence": 0.5109249026466635,
     "probabilities": {
-      "UP": 0.2389782067852234,
+      "UP": 0.2389782067852235,
       "DOWN": 0.5109249026466635,
-      "CONSOLIDATION": 0.2500968905681131
+      "CONSOLIDATION": 0.25009689056811313
     },
     "signals": [
       "Bull Breaker",
@@ -830,11 +830,11 @@
     "trade": {
       "action": "SHORT",
       "entry": 26292.88,
-      "stop_loss": 26883.96,
-      "take_profit": 26282.26,
-      "risk": 591.08,
-      "reward": 10.62,
-      "risk_reward": 0.02,
+      "stop_loss": 26536.79,
+      "take_profit": 25571.26,
+      "risk": 243.91,
+      "reward": 721.62,
+      "risk_reward": 2.96,
       "conviction": "Medium",
       "entry_type": "H1 FVG mid limit (heuristic; zone strength 0.55; valid 8 H1 bars)",
       "stop_source": "beyond zone (clear of other zones)",
@@ -851,11 +851,11 @@
   },
   "DJI": {
     "bias": "UP",
-    "confidence": 0.3917708983218775,
+    "confidence": 0.39177089832187756,
     "probabilities": {
-      "UP": 0.3917708983218775,
-      "DOWN": 0.3488142979696416,
-      "CONSOLIDATION": 0.2594148037084809
+      "UP": 0.39177089832187756,
+      "DOWN": 0.3488142979696415,
+      "CONSOLIDATION": 0.25941480370848097
     },
     "signals": [
       "Bull Breaker",
@@ -1226,11 +1226,11 @@
     "trade": {
       "action": "LONG",
       "entry": 50447.0,
-      "stop_loss": 50110.15,
-      "take_profit": 50952.27,
-      "risk": 336.85,
-      "reward": 505.27,
-      "risk_reward": 1.5,
+      "stop_loss": 50225.15,
+      "take_profit": 50658.45,
+      "risk": 221.85,
+      "reward": 211.45,
+      "risk_reward": 0.95,
       "conviction": "Low",
       "entry_type": "H1 BREAKER edge limit (fallback; nearest zone; valid 8 H1 bars)",
       "stop_source": "beyond recent H1 swing low (clamped 0.75-2.0 ATR, clear of zones)",
@@ -1728,11 +1728,11 @@
   },
   "EURUSD": {
     "bias": "UP",
-    "confidence": 0.37166248375179334,
+    "confidence": 0.3716624837517933,
     "probabilities": {
-      "UP": 0.37166248375179334,
-      "DOWN": 0.33151244837663796,
-      "CONSOLIDATION": 0.2968250678715687
+      "UP": 0.3716624837517933,
+      "DOWN": 0.3315124483766381,
+      "CONSOLIDATION": 0.29682506787156854
     },
     "signals": [
       "Bull Breaker",
@@ -2027,12 +2027,22 @@
         "zones": [
           {
             "kind": "ob",
+            "dir": "bull",
+            "top": 1.09344,
+            "bottom": 1.09312,
+            "start": "2026-11-27T21:30:00+00:00",
+            "touches": 0,
+            "age": 0,
+            "strength": 0.5
+          },
+          {
+            "kind": "ob",
             "dir": "bear",
             "top": 1.09404,
             "bottom": 1.09358,
             "start": "2026-11-27T17:15:00+00:00",
             "touches": 7,
-            "age": 16,
+            "age": 17,
             "strength": 0.5
           },
           {
@@ -2042,7 +2052,7 @@
             "bottom": 1.0943,
             "start": "2026-11-27T15:00:00+00:00",
             "touches": 2,
-            "age": 26,
+            "age": 27,
             "strength": 0.5
           },
           {
@@ -2052,7 +2062,7 @@
             "bottom": 1.09522,
             "start": "2026-11-27T12:45:00+00:00",
             "touches": 4,
-            "age": 33,
+            "age": 34,
             "strength": 0.5
           },
           {
@@ -2062,7 +2072,7 @@
             "bottom": 1.09595,
             "start": "2026-11-27T13:00:00+00:00",
             "touches": 0,
-            "age": 34,
+            "age": 35,
             "strength": 0.5
           },
           {
@@ -2072,7 +2082,7 @@
             "bottom": 1.0969,
             "start": "2026-11-27T08:00:00+00:00",
             "touches": 3,
-            "age": 54,
+            "age": 55,
             "strength": 0.5
           },
           {
@@ -2082,7 +2092,7 @@
             "bottom": 1.0971,
             "start": "2026-11-27T07:45:00+00:00",
             "touches": 1,
-            "age": 54,
+            "age": 55,
             "strength": 0.5
           },
           {
@@ -2092,7 +2102,7 @@
             "bottom": 1.09768,
             "start": "2026-11-27T07:00:00+00:00",
             "touches": 2,
-            "age": 57,
+            "age": 58,
             "strength": 0.5
           },
           {
@@ -2102,7 +2112,7 @@
             "bottom": 1.09804,
             "start": "2026-11-26T14:45:00+00:00",
             "touches": 10,
-            "age": 123,
+            "age": 124,
             "strength": 0.5
           }
         ],
@@ -2133,11 +2143,11 @@
     "trade": {
       "action": "LONG",
       "entry": 1.09541,
-      "stop_loss": 1.08768,
-      "take_profit": 1.09809,
-      "risk": 0.00773,
-      "reward": 0.00268,
-      "risk_reward": 0.35,
+      "stop_loss": 1.09268,
+      "take_profit": 1.0991,
+      "risk": 0.00273,
+      "reward": 0.00369,
+      "risk_reward": 1.35,
       "conviction": "Low",
       "entry_type": "H1 IFVG edge limit (heuristic; zone strength 0.54; valid 8 H1 bars)",
       "stop_source": "beyond zone (clear of other zones)",
@@ -2461,21 +2471,31 @@
           {
             "kind": "ob",
             "dir": "bear",
-            "top": 1.42508,
-            "bottom": 1.42486,
-            "start": "2026-11-27T20:15:00+00:00",
-            "touches": 3,
-            "age": 4,
+            "top": 1.42514,
+            "bottom": 1.42462,
+            "start": "2026-11-27T21:30:00+00:00",
+            "touches": 0,
+            "age": 0,
             "strength": 0.5
           },
           {
-            "kind": "ob",
+            "kind": "fvg",
             "dir": "bull",
-            "top": 1.4252,
-            "bottom": 1.42356,
-            "start": "2026-11-27T13:45:00+00:00",
+            "top": 1.42474,
+            "bottom": 1.4246,
+            "start": "2026-11-27T18:15:00+00:00",
+            "touches": 7,
+            "age": 12,
+            "strength": 0.5
+          },
+          {
+            "kind": "breaker",
+            "dir": "bull",
+            "top": 1.42458,
+            "bottom": 1.42391,
+            "start": "2026-11-27T13:00:00+00:00",
             "touches": 10,
-            "age": 30,
+            "age": 35,
             "strength": 0.5
           },
           {
@@ -2485,7 +2505,7 @@
             "bottom": 1.42507,
             "start": "2026-11-27T13:15:00+00:00",
             "touches": 10,
-            "age": 32,
+            "age": 33,
             "strength": 0.5
           },
           {
@@ -2495,7 +2515,7 @@
             "bottom": 1.42231,
             "start": "2026-11-27T07:00:00+00:00",
             "touches": 10,
-            "age": 57,
+            "age": 58,
             "strength": 0.5
           },
           {
@@ -2505,17 +2525,7 @@
             "bottom": 1.42632,
             "start": "2026-11-25T11:45:00+00:00",
             "touches": 2,
-            "age": 229,
-            "strength": 0.5
-          },
-          {
-            "kind": "ob",
-            "dir": "bear",
-            "top": 1.4281,
-            "bottom": 1.42744,
-            "start": "2026-11-25T11:30:00+00:00",
-            "touches": 1,
-            "age": 231,
+            "age": 230,
             "strength": 0.5
           },
           {
@@ -2525,7 +2535,7 @@
             "bottom": 1.42202,
             "start": "2026-11-26T09:15:00+00:00",
             "touches": 8,
-            "age": 144,
+            "age": 145,
             "strength": 0.5
           },
           {
@@ -2535,7 +2545,17 @@
             "bottom": 1.42112,
             "start": "2026-11-26T03:00:00+00:00",
             "touches": 10,
-            "age": 170,
+            "age": 171,
+            "strength": 0.5
+          },
+          {
+            "kind": "ob",
+            "dir": "bear",
+            "top": 1.4281,
+            "bottom": 1.42744,
+            "start": "2026-11-25T11:30:00+00:00",
+            "touches": 1,
+            "age": 232,
             "strength": 0.5
           },
           {
@@ -2545,7 +2565,7 @@
             "bottom": 1.42794,
             "start": "2026-11-25T11:00:00+00:00",
             "touches": 2,
-            "age": 234,
+            "age": 235,
             "strength": 0.5
           },
           {
@@ -2555,17 +2575,7 @@
             "bottom": 1.4282,
             "start": "2026-11-25T09:45:00+00:00",
             "touches": 4,
-            "age": 238,
-            "strength": 0.5
-          },
-          {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 1.43019,
-            "bottom": 1.42884,
-            "start": "2026-11-24T17:00:00+00:00",
-            "touches": 8,
-            "age": 304,
+            "age": 239,
             "strength": 0.5
           },
           {
@@ -2575,7 +2585,7 @@
             "bottom": 1.4205,
             "start": "2026-11-25T20:30:00+00:00",
             "touches": 7,
-            "age": 194,
+            "age": 195,
             "strength": 0.5
           }
         ],
@@ -2592,13 +2602,13 @@
           },
           {
             "type": "ssl",
-            "price": 1.4233,
-            "start": "2026-11-27T16:45:00+00:00"
+            "price": 1.4245,
+            "start": "2026-11-27T21:00:00+00:00"
           },
           {
             "type": "ssl",
-            "price": 1.42227,
-            "start": "2026-11-27T07:15:00+00:00"
+            "price": 1.4233,
+            "start": "2026-11-27T16:45:00+00:00"
           }
         ],
         "structure": [
@@ -2634,11 +2644,11 @@
     "trade": {
       "action": "SHORT",
       "entry": 1.42491,
-      "stop_loss": 1.43058,
+      "stop_loss": 1.42765,
       "take_profit": 1.41908,
-      "risk": 0.00567,
+      "risk": 0.00274,
       "reward": 0.00583,
-      "risk_reward": 1.03,
+      "risk_reward": 2.12,
       "conviction": "Low",
       "entry_type": "H1 FVG edge limit (heuristic; zone strength 0.54; relaxed filters L1; valid 8 H1 bars)",
       "stop_source": "beyond zone (clear of other zones)",
@@ -2649,17 +2659,17 @@
         "kind": "fvg",
         "dir": "bear",
         "timeframe": "H1",
-        "strength": 0.543088910387223
+        "strength": 0.5430889103872228
       }
     }
   },
   "USDCHF": {
     "bias": "CONSOLIDATION",
-    "confidence": 0.3920808087290009,
+    "confidence": 0.3920808087290008,
     "probabilities": {
-      "UP": 0.2733228187982873,
-      "DOWN": 0.33459637247271184,
-      "CONSOLIDATION": 0.3920808087290009
+      "UP": 0.27332281879828735,
+      "DOWN": 0.33459637247271196,
+      "CONSOLIDATION": 0.3920808087290008
     },
     "signals": [
       "Bull IFVG",
@@ -2948,12 +2958,12 @@
           {
             "kind": "ob",
             "dir": "bear",
-            "top": 0.8371,
-            "bottom": 0.83589,
-            "start": "2026-11-24T15:00:00+00:00",
+            "top": 0.83656,
+            "bottom": 0.83618,
+            "start": "2026-11-27T09:00:00+00:00",
             "touches": 10,
-            "age": 313,
-            "strength": 0.29
+            "age": 50,
+            "strength": 0.52
           },
           {
             "kind": "ifvg",
@@ -2962,7 +2972,7 @@
             "bottom": 0.83596,
             "start": "2026-11-27T17:30:00+00:00",
             "touches": 2,
-            "age": 16,
+            "age": 17,
             "strength": 0.49
           },
           {
@@ -2972,8 +2982,18 @@
             "bottom": 0.83544,
             "start": "2026-11-27T17:15:00+00:00",
             "touches": 0,
-            "age": 16,
+            "age": 17,
             "strength": 0.44
+          },
+          {
+            "kind": "ifvg",
+            "dir": "bear",
+            "top": 0.83683,
+            "bottom": 0.83661,
+            "start": "2026-11-25T06:45:00+00:00",
+            "touches": 5,
+            "age": 252,
+            "strength": 0.57
           },
           {
             "kind": "ifvg",
@@ -2982,7 +3002,7 @@
             "bottom": 0.83496,
             "start": "2026-11-27T13:00:00+00:00",
             "touches": 4,
-            "age": 34,
+            "age": 35,
             "strength": 0.49
           },
           {
@@ -2992,7 +3012,7 @@
             "bottom": 0.83405,
             "start": "2026-11-27T07:30:00+00:00",
             "touches": 10,
-            "age": 55,
+            "age": 56,
             "strength": 0.42
           },
           {
@@ -3002,7 +3022,7 @@
             "bottom": 0.83396,
             "start": "2026-11-27T07:00:00+00:00",
             "touches": 1,
-            "age": 56,
+            "age": 57,
             "strength": 0.47
           },
           {
@@ -3012,7 +3032,7 @@
             "bottom": 0.83336,
             "start": "2026-11-27T07:00:00+00:00",
             "touches": 1,
-            "age": 57,
+            "age": 58,
             "strength": 0.45
           },
           {
@@ -3022,7 +3042,7 @@
             "bottom": 0.8332,
             "start": "2026-11-26T14:15:00+00:00",
             "touches": 1,
-            "age": 123,
+            "age": 124,
             "strength": 0.55
           },
           {
@@ -3032,7 +3052,7 @@
             "bottom": 0.83209,
             "start": "2026-11-26T09:15:00+00:00",
             "touches": 5,
-            "age": 144,
+            "age": 145,
             "strength": 0.48
           },
           {
@@ -3042,7 +3062,7 @@
             "bottom": 0.83157,
             "start": "2026-11-26T07:00:00+00:00",
             "touches": 4,
-            "age": 153,
+            "age": 154,
             "strength": 0.42
           },
           {
@@ -3052,18 +3072,8 @@
             "bottom": 0.8313,
             "start": "2026-11-26T03:00:00+00:00",
             "touches": 8,
-            "age": 170,
+            "age": 171,
             "strength": 0.41
-          },
-          {
-            "kind": "ifvg",
-            "dir": "bull",
-            "top": 0.83138,
-            "bottom": 0.83084,
-            "start": "2026-11-26T00:15:00+00:00",
-            "touches": 9,
-            "age": 181,
-            "strength": 0.35
           }
         ],
         "levels": [
@@ -3122,10 +3132,10 @@
       "action": "SHORT",
       "entry": 0.8332,
       "stop_loss": 0.83659,
-      "take_profit": 0.8317,
+      "take_profit": 0.82901,
       "risk": 0.00339,
-      "reward": 0.0015,
-      "risk_reward": 0.44,
+      "reward": 0.00419,
+      "risk_reward": 1.24,
       "conviction": "Low",
       "entry_type": "H1 FVG edge limit (heuristic; zone strength 0.56; valid 8 H1 bars)",
       "stop_source": "beyond zone (clear of other zones)",
@@ -3376,23 +3386,23 @@
       "m15": {
         "zones": [
           {
-            "kind": "fvg",
-            "dir": "bear",
-            "top": 59870.72,
-            "bottom": 59810.01,
-            "start": "2026-11-27T19:45:00+00:00",
-            "touches": 5,
-            "age": 5,
-            "strength": 0.5
-          },
-          {
             "kind": "ifvg",
             "dir": "bull",
             "top": 59882.35,
             "bottom": 59772.47,
             "start": "2026-11-27T17:45:00+00:00",
             "touches": 10,
-            "age": 15,
+            "age": 16,
+            "strength": 0.5
+          },
+          {
+            "kind": "fvg",
+            "dir": "bear",
+            "top": 59870.72,
+            "bottom": 59810.01,
+            "start": "2026-11-27T19:45:00+00:00",
+            "touches": 6,
+            "age": 6,
             "strength": 0.5
           },
           {
@@ -3402,7 +3412,7 @@
             "bottom": 59004.18,
             "start": "2026-11-25T17:15:00+00:00",
             "touches": 10,
-            "age": 208,
+            "age": 209,
             "strength": 0.5
           },
           {
@@ -3412,7 +3422,7 @@
             "bottom": 59910.33,
             "start": "2026-11-27T19:30:00+00:00",
             "touches": 0,
-            "age": 6,
+            "age": 7,
             "strength": 0.5
           },
           {
@@ -3422,7 +3432,7 @@
             "bottom": 60018.08,
             "start": "2026-11-27T16:30:00+00:00",
             "touches": 3,
-            "age": 19,
+            "age": 20,
             "strength": 0.5
           },
           {
@@ -3432,7 +3442,7 @@
             "bottom": 60273.71,
             "start": "2026-11-27T14:15:00+00:00",
             "touches": 2,
-            "age": 27,
+            "age": 28,
             "strength": 0.5
           },
           {
@@ -3442,7 +3452,7 @@
             "bottom": 58612.78,
             "start": "2026-11-25T16:45:00+00:00",
             "touches": 1,
-            "age": 209,
+            "age": 210,
             "strength": 0.5
           },
           {
@@ -3452,7 +3462,7 @@
             "bottom": 58103.21,
             "start": "2026-11-25T16:30:00+00:00",
             "touches": 1,
-            "age": 211,
+            "age": 212,
             "strength": 0.5
           },
           {
@@ -3462,7 +3472,7 @@
             "bottom": 57363.39,
             "start": "2026-11-25T14:30:00+00:00",
             "touches": 7,
-            "age": 219,
+            "age": 220,
             "strength": 0.5
           },
           {
@@ -3472,7 +3482,7 @@
             "bottom": 61442.04,
             "start": "2026-11-27T12:45:00+00:00",
             "touches": 5,
-            "age": 34,
+            "age": 35,
             "strength": 0.5
           },
           {
@@ -3482,20 +3492,20 @@
             "bottom": 61734.24,
             "start": "2026-11-27T06:00:00+00:00",
             "touches": 10,
-            "age": 61,
+            "age": 62,
             "strength": 0.5
           }
         ],
         "levels": [
           {
             "type": "bsl",
-            "price": 60047.24,
-            "start": "2026-11-27T19:30:00+00:00"
+            "price": 59879.11,
+            "start": "2026-11-27T21:00:00+00:00"
           },
           {
             "type": "bsl",
-            "price": 60559.62,
-            "start": "2026-11-27T16:30:00+00:00"
+            "price": 60047.24,
+            "start": "2026-11-27T19:30:00+00:00"
           },
           {
             "type": "ssl",
@@ -3531,11 +3541,11 @@
     "trade": {
       "action": "SHORT",
       "entry": 60458.01,
-      "stop_loss": 64144.18,
+      "stop_loss": 61737.19,
       "take_profit": 59039.21,
-      "risk": 3686.17,
+      "risk": 1279.18,
       "reward": 1418.8,
-      "risk_reward": 0.38,
+      "risk_reward": 1.11,
       "conviction": "Medium",
       "entry_type": "H1 BREAKER edge limit (heuristic; zone strength 0.50; valid 8 H1 bars)",
       "stop_source": "beyond zone (clear of other zones)",
