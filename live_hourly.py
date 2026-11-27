@@ -35,7 +35,7 @@ MARKETS = {
     "EURUSD": {"tv": "OANDA:EURUSD",   "yahoo": "EURUSD=X"},
     "USDCAD": {"tv": "OANDA:USDCAD",   "yahoo": "CAD=X"},
     "USDCHF": {"tv": "OANDA:USDCHF",   "yahoo": "CHF=X"},
-    "BTCUSD": {"tv": "BITSTAMP:BTCUSD", "yahoo": "BTC-USD"},
+    "BTCUSD": {"tv": "BINANCE:BTCUSDT", "yahoo": "BTC-USD"},
 }
 
 

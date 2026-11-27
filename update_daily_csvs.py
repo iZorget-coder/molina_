@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import asyncio
 import threading
+import time
 from datetime import datetime, timezone, timedelta
 
 # Map daily CSV -> (Yahoo ticker, hourly CSV, TradingView symbol)
@@ -20,7 +21,7 @@ TICKER_MAP = {
     "EURUSD_1d_data.csv": ("EURUSD=X", "EURUSD_H1.csv", "OANDA:EURUSD"),
     "USDCAD_1d_data.csv": ("CAD=X",    "USDCAD_H1.csv", "OANDA:USDCAD"),
     "USDCHF_1d_data.csv": ("CHF=X",    "USDCHF_H1.csv", "OANDA:USDCHF"),
-    "BTCUSD_1d_data.csv": ("BTC-USD",  "BTCUSD_H1.csv", "BITSTAMP:BTCUSD"),
+    "BTCUSD_1d_data.csv": ("BTC-USD",  "BTCUSD_H1.csv", "BINANCE:BTCUSDT"),
 }
 
 # Map daily CSV -> 15-minute CSV (same market, different granularity)
@@ -32,7 +33,7 @@ FIFTEEN_MAP = {
     "EURUSD_1d_data.csv": ("EURUSD=X", "EURUSD_15m.csv", "OANDA:EURUSD"),
     "USDCAD_1d_data.csv": ("CAD=X",    "USDCAD_15m.csv", "OANDA:USDCAD"),
     "USDCHF_1d_data.csv": ("CHF=X",    "USDCHF_15m.csv", "OANDA:USDCHF"),
-    "BTCUSD_1d_data.csv": ("BTC-USD",  "BTCUSD_15m.csv", "BITSTAMP:BTCUSD"),
+    "BTCUSD_1d_data.csv": ("BTC-USD",  "BTCUSD_15m.csv", "BINANCE:BTCUSDT"),
 }
 
 # ── 15-minute data replaces the OHLC of each newly appended daily candle ──────────────
@@ -378,53 +379,72 @@ def update_daily_csv(daily_path, yahoo_ticker, hourly_path, tv_symbol, fifteen_p
 # 4. 15-MINUTE UPDATER
 # ─────────────────────────────────────────────────────────────
 
-def _tv_15m_bars(tv_symbol, after_ts, now_utc):
-    """Completed 15-minute bars from TradingView with timestamp > after_ts and bar fully closed."""
-    try:
-        from tvkit.api.chart.ohlcv import OHLCV
-    except ImportError:
-        print("  tvkit not installed — skipping TradingView 15m")
-        return []
+# Chunked 15-minute fetch (same approach as the fetch_15m_75d notebook): TradingView only serves ~80 days of
+# 15m history per request window, so the range is split into 25-day chunks, each fetched on its own.
+TV_15M_LOOKBACK_DAYS = 75
+TV_15M_CHUNK_DAYS    = 25
+TV_15M_TIMEOUT_S     = 90
 
-    start = (after_ts - timedelta(days=1)).date().isoformat()
-    end   = (now_utc.date() + timedelta(days=1)).isoformat()
+
+def _tv_fetch_chunk(tv_symbol, c_start, c_end):
+    """One TradingView 15m request for [c_start, c_end) (ISO dates). Returns the bar list or []."""
+    from tvkit.api.chart.ohlcv import OHLCV
     box = {"bars": None, "error": None}
 
     async def _inner():
         async with OHLCV() as client:
             return await client.get_historical_ohlcv(
-                exchange_symbol=tv_symbol,
-                interval="15",
-                start=start,
-                end=end,
-            )
+                exchange_symbol=tv_symbol, interval="15", start=c_start, end=c_end)
 
     def _runner():
+        loop = asyncio.new_event_loop()
         try:
-            loop = asyncio.new_event_loop()
-            try:
-                asyncio.set_event_loop(loop)
-                box["bars"] = loop.run_until_complete(_inner())
-            finally:
-                try:
-                    loop.close()
-                finally:
-                    asyncio.set_event_loop(None)
+            asyncio.set_event_loop(loop)
+            box["bars"] = loop.run_until_complete(_inner())
         except Exception as e:
             box["error"] = e
+        finally:
+            loop.close()
+            asyncio.set_event_loop(None)
 
     t = threading.Thread(target=_runner, daemon=True)
     t.start()
-    t.join(timeout=90)
-
+    t.join(timeout=TV_15M_TIMEOUT_S)
     if t.is_alive():
-        print(f"  TradingView 15m fetch timed out ({tv_symbol})")
+        print(f"    chunk {c_start} -> {c_end}: timed out")
         return []
     if box["error"] is not None:
         e = box["error"]
-        print(f"  TradingView 15m fetch failed ({tv_symbol}): {e.__class__.__name__}: {e}")
+        print(f"    chunk {c_start} -> {c_end}: {e.__class__.__name__}: {e}")
         return []
     if not box["bars"]:
+        print(f"    chunk {c_start} -> {c_end}: 0 bars")
+        return []
+    print(f"    chunk {c_start} -> {c_end}: {len(box['bars'])} bars")
+    return list(box["bars"])
+
+
+def _tv_15m_bars(tv_symbol, after_ts, now_utc):
+    """Completed 15-minute bars from TradingView with timestamp > after_ts and bar fully closed.
+    Starts one day before the newest bar we have (so it self-heals) and never further back than the
+    75-day window; a missing file therefore gets a full 75-day backfill in one run."""
+    try:
+        import tvkit  # noqa: F401
+    except ImportError:
+        print("  tvkit not installed — skipping TradingView 15m")
+        return []
+
+    floor = now_utc.date() - timedelta(days=TV_15M_LOOKBACK_DAYS)
+    start_d = max((after_ts - timedelta(days=1)).date(), floor)
+    end_d = now_utc.date() + timedelta(days=1)          # include today's still-forming bar (dropped below)
+
+    raw, cur = [], start_d
+    while cur < end_d:
+        nxt = min(cur + timedelta(days=TV_15M_CHUNK_DAYS), end_d)
+        raw += _tv_fetch_chunk(tv_symbol, cur.isoformat(), nxt.isoformat())
+        cur = nxt
+        time.sleep(1)                                    # be kind to TradingView
+    if not raw:
         print(f"  TradingView returned 0 15m bars for {tv_symbol}")
         return []
 
@@ -432,23 +452,27 @@ def _tv_15m_bars(tv_symbol, after_ts, now_utc):
     last_closed = now_utc.replace(minute=(now_utc.minute // 15) * 15, second=0, microsecond=0)
 
     bars = []
-    for b in sorted(box["bars"], key=lambda x: x.timestamp):
+    for b in sorted(raw, key=lambda x: x.timestamp):
         ts = pd.to_datetime(b.timestamp, unit="s", utc=True)
-        if ts <= after_ts:
+        if ts <= after_ts or ts >= last_closed:
             continue
-        if ts >= last_closed:
-            continue  # still forming
-        if any(pd.isna(v) for v in (b.open, b.high, b.low, b.close)):
+        o, h, l, c = b.open, b.high, b.low, b.close
+        if any(pd.isna(v) for v in (o, h, l, c)) or min(o, h, l, c) <= 0 or h < l:
             continue
         vol = getattr(b, "volume", None)
         bars.append({
             "timestamp": ts.isoformat(),
-            "open":   float(b.open),
-            "high":   float(b.high),
-            "low":    float(b.low),
-            "close":  float(b.close),
+            "open":   float(o),
+            "high":   float(max(h, o, c)),
+            "low":    float(min(l, o, c)),
+            "close":  float(c),
             "volume": float(vol) if vol is not None and not pd.isna(vol) else 0,
         })
+
+    # one bad print must not wreck the axis: everything within +/-50% of the median close
+    if bars:
+        med = float(pd.Series([x["close"] for x in bars]).median())
+        bars = [x for x in bars if all(med * 0.5 <= x[k] <= med * 1.5 for k in ("open", "high", "low", "close"))]
     return bars
 
 
@@ -493,13 +517,13 @@ def update_15m_csv(csv_path, yahoo_ticker, tv_symbol):
     if os.path.exists(csv_path):
         df = pd.read_csv(csv_path)
         if df.empty:
-            after_ts = now_utc - timedelta(days=5)
+            after_ts = now_utc - timedelta(days=TV_15M_LOOKBACK_DAYS)
         else:
             df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
             after_ts = df["timestamp"].max()
     else:
         df = pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
-        after_ts = now_utc - timedelta(days=5)
+        after_ts = now_utc - timedelta(days=TV_15M_LOOKBACK_DAYS)
 
     print(f"{csv_path}: last 15m bar = {after_ts} (now UTC = {now_utc})")
 

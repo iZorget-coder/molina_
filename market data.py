@@ -79,7 +79,7 @@ HOURLY_FALLBACK = {
     "EUR/USD":       ("OANDA:EURUSD",   "EURUSD"),
     "USD/CAD":       ("OANDA:USDCAD",   "USDCAD"),
     "USD/CHF":       ("OANDA:USDCHF",   "USDCHF"),
-    "BITCOIN (BTCUSD)": ("BITSTAMP:BTCUSD", "BTCUSD"),
+    "BITCOIN (BTCUSD)": ("BINANCE:BTCUSDT", "BTCUSD"),
 }
 
 # --- Displayed confidence -------------------------------------------------------------------
