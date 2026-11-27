@@ -979,9 +979,9 @@ function paintChart() {
       : parts.length ? parts.join(' · ') : 'Nothing to draw in view');
   }
 
-  /* ----- The zone the entry sits on (always drawn, so the entry is visibly anchored to a zone) ----- */
+  /* ----- The zone the entry sits on (shown with the SMC toggle + Zones layer) ----- */
   const ez = t?.entryZone;
-  if (ez && ez.top >= lo && ez.bottom <= hi) {
+  if (ez && smcState.on && smcState.layers.zones && ez.top >= lo && ez.bottom <= hi) {   // only with SMC + Zones on
     const yT = y(Math.min(ez.top, hi));
     const yB = y(Math.max(ez.bottom, lo));
     const h = Math.max(yB - yT, 2);
