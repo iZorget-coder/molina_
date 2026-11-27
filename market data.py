@@ -505,7 +505,7 @@ def daily_zone_summary(dP: dict, di: int, close: float, n: int = 3):
     return dem, sup
 
 
-def smc_export(P: dict, t: int, times, fmt, close: float, max_age: int, n_zones: int = 6) -> dict:
+def smc_export(P: dict, t: int, times, fmt, close: float, max_age: int, n_zones: int = 12) -> dict:
     """Chart-ready SMC drawings as of bar t (kept small and sparse on purpose):
     nearest still-valid zones, nearest unswept swing liquidity, the last structure break and
     recent liquidity sweeps. Times go through `fmt(times[i])` so the front end can place them."""
@@ -757,6 +757,57 @@ def _features(P, t, side, z, E, S, T, rr, e_frac, s_style, rank, is_eq, ctx, con
     return np.nan_to_num(np.array([f[k] for k in cfg["cols"]], dtype=float))
 
 
+# --- Stops and targets stay out of the middle of zones ---------------------------------------------
+# A stop inside an FVG / OB / IFVG / breaker is just a place price likes to trade through, so it is
+# moved to just BEYOND the zone (above it for a short, below it for a long). A take-profit inside a
+# zone on its way is pulled back to just BEFORE the zone's near edge (price often stalls there and
+# never reaches a target in the middle of it).
+ZONE_TARGET_BUF_ATR = 0.05
+
+
+def _active_zone_bounds(P: dict, t: int) -> list:
+    """(bottom, top) of every still-valid zone known at bar t (both directions, sweeps excluded)."""
+    out = []
+    for k in range(max(0, t - _cfg(P)["zone_max_age"]), t + 1):
+        for z in P["Z"].get(k, ()):
+            if z["kind"] == "sweep" or (z["inv"] is not None and z["inv"] <= t):
+                continue
+            if z["top"] > z["bottom"]:
+                out.append((float(z["bottom"]), float(z["top"])))
+    return out
+
+
+def _clear_stop(S: float, long: bool, bounds: list, buf: float) -> float:
+    """Move a stop that sits inside a zone (or within `buf` of its outer edge) to just beyond that zone."""
+    for _ in range(len(bounds) + 1):
+        moved = False
+        for b, tp in bounds:
+            if long and b - buf < S < tp:
+                S, moved = b - buf, True
+            elif (not long) and b < S < tp + buf:
+                S, moved = tp + buf, True
+        if not moved:
+            break
+    return S
+
+
+def _clear_target(T: float, E: float, long: bool, bounds: list, buf: float):
+    """Pull a target that sits inside an opposing zone back to just before the zone. Only zones that
+    start beyond the entry count. Returns None if nothing sensible is left between entry and zone."""
+    for _ in range(len(bounds) + 1):
+        moved = False
+        for b, tp in bounds:
+            if long and b > E and b - buf < T <= tp:
+                T, moved = b - buf, True
+            elif (not long) and tp < E and b <= T < tp + buf:
+                T, moved = tp + buf, True
+        if not moved:
+            break
+    if (long and T <= E) or ((not long) and T >= E):
+        return None
+    return T
+
+
 RELAX = [   # (max_entry_dist, min_risk, max_risk, min_rr, max_rr) -- tried in order until a candidate exists
     (MAX_ENTRY_DIST_ATR, MIN_RISK_ATR, MAX_RISK_ATR, MIN_RR, MAX_RR),
     (3.0, 0.35, 3.5, 0.8, 6.0),
@@ -794,6 +845,7 @@ def _candidates(P: dict, t: int, side: str, ctx: dict, level: int = 0) -> list:
     pool.sort(key=lambda x: (x[0], x[1]))
     lows = _live_swings(P, t, "sl"); highs = _live_swings(P, t, "sh")
     stop_sw, tgt_sw = (lows, highs) if long else (highs, lows)
+    bounds = _active_zone_bounds(P, t)
     out = []
     for _, _, z in pool[:TOP_ZONES]:
         width = z["top"] - z["bottom"]
@@ -808,11 +860,12 @@ def _candidates(P: dict, t: int, side: str, ctx: dict, level: int = 0) -> list:
             confl = sum(1 for _, _, z2 in pool if z2 is not z and
                         z2["bottom"] - 0.25 * atr <= E <= z2["top"] + 0.25 * atr)
             sbuf = cfg["stop_buf"]
-            stops = [("zone", z["bottom"] - sbuf * atr if long else z["top"] + sbuf * atr)]
+            stops = [("zone", _clear_stop(z["bottom"] - sbuf * atr if long else z["top"] + sbuf * atr,
+                                          long, bounds, sbuf * atr))]
             sw = [(i, p) for i, p in stop_sw if (p < E - 0.1 * atr if long else p > E + 0.1 * atr)]
             if sw:
                 _, p_ = max(sw, key=lambda x: x[0])        # most recent swing beyond entry
-                S2 = p_ - sbuf * atr if long else p_ + sbuf * atr
+                S2 = _clear_stop(p_ - sbuf * atr if long else p_ + sbuf * atr, long, bounds, sbuf * atr)
                 if abs(S2 - stops[0][1]) > 0.1 * atr:
                     stops.append(("swing", S2))
             for s_style, S in stops:
@@ -824,6 +877,9 @@ def _candidates(P: dict, t: int, side: str, ctx: dict, level: int = 0) -> list:
                 rank = 0
                 for p in tl:
                     T = p - TARGET_BUF_ATR * atr if long else p + TARGET_BUF_ATR * atr
+                    T = _clear_target(T, E, long, bounds, ZONE_TARGET_BUF_ATR * atr)
+                    if T is None:
+                        continue
                     rr = abs(T - E) / risk
                     if rr < min_rr:
                         continue
@@ -1016,6 +1072,8 @@ def _fallback_candidate(P: dict, t: int, side: str):
         S = E - 0.75 * atr if long else E + 0.75 * atr
     elif risk > 2.0 * atr:
         S = E - 2.0 * atr if long else E + 2.0 * atr
+    bounds = _active_zone_bounds(P, t)
+    S = _clear_stop(S, long, bounds, cfg["stop_buf"] * atr)     # never inside a zone (may exceed the 2 ATR clamp)
     risk = abs(E - S)
     tgt_sw = _live_swings(P, t, "sh" if long else "sl")
     tl = sorted([p for _, p in tgt_sw if (p > E + 0.3 * atr if long else p < E - 0.3 * atr)],
@@ -1024,6 +1082,9 @@ def _fallback_candidate(P: dict, t: int, side: str):
         T, tsrc = tl[0], f"{tf} swing {'high' if long else 'low'} #1"
     else:
         T, tsrc = (E + 1.5 * risk if long else E - 1.5 * risk), "1.5R fallback"
+    T2 = _clear_target(T, E, long, bounds, ZONE_TARGET_BUF_ATR * atr)
+    if T2 is not None and abs(T2 - E) >= 0.8 * risk:
+        T = T2
     cd = {"entry": float(E), "stop": float(S), "target": float(T), "rr": abs(T - E) / risk,
           "zone": z or {"kind": "none", "top": c_t, "bottom": c_t, "known": t, "formation": t},
           "e_frac": 0.0, "s_style": "swing", "rank": 0, "is_eq": False}
@@ -1062,13 +1123,13 @@ def pick_live_trade(P: dict, t: int, side: str, ctx: dict, model: dict):
                  + (f"model; P(fill)={pf:.2f}, EV={evk:+.2f}R" if tag == "model" else "heuristic")
                  + f"{relax_txt}; valid {cfg['valid']} {cfg['unit']})")
         ssrc = ("beyond zone" if cd["s_style"] == "zone"
-                else f"beyond recent {tf} swing {'low' if long else 'high'}")
+                else f"beyond recent {tf} swing {'low' if long else 'high'}") + " (clear of other zones)"
         tsrc = (f"{tf} swing {'high' if long else 'low'} #{cd['rank'] + 1}"
                 + (" (equal-level liquidity)" if cd["is_eq"] else ""))
     else:
         cd, etype, tsrc = _fallback_candidate(P, t, side)
         z = cd["zone"]; score = 0.0
-        ssrc = f"beyond recent {tf} swing {'low' if long else 'high'} (clamped 0.75-2.0 ATR)"
+        ssrc = f"beyond recent {tf} swing {'low' if long else 'high'} (clamped 0.75-2.0 ATR, clear of zones)"
     hr = int(P["hour"][z["known"]]) if z.get("known") is not None else int(P["hour"][t])
     kz = "London KZ" if 7 <= hr < 10 else ("Silver Bullet" if 14 <= hr < 15
                                             else ("NY AM KZ" if 12 <= hr < 15 else "none"))

@@ -80,10 +80,8 @@ function formatCandleLabel(c, timeframe) {
   if (timeframe === '1H' || timeframe === '15m') {
     const d = new Date(c.time);
     if (isNaN(d.getTime())) return c.time || '';
-    // SAST = UTC+2 (fixed, no DST). Shift then read UTC parts.
-    const sast = new Date(d.getTime() + 2 * 3600000);
-    const mins = timeframe === '15m' ? String(sast.getUTCMinutes()).padStart(2, '0') : '00';
-    return `${MONTHS[sast.getUTCMonth()]} ${sast.getUTCDate()} ${String(sast.getUTCHours()).padStart(2, '0')}:${mins}`;
+    const mins = timeframe === '15m' ? String(d.getUTCMinutes()).padStart(2, '0') : '00';
+    return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()} ${String(d.getUTCHours()).padStart(2, '0')}:${mins}`;
   }
   if (!c.date) return '';
   const [, mo, day] = c.date.split('-').map(Number);
@@ -664,7 +662,16 @@ function buildSmcOverlay({ set, candles, isH1, ageUnit, PAD, plotW, plotH, plotR
   out.back += `<defs><clipPath id="smc-clip"><rect x="${PAD.left}" y="${PAD.top}" width="${plotW}" height="${plotH}"/></clipPath></defs><g clip-path="url(#smc-clip)">`;
 
   if (layers.zones) {
-    (set.zones || []).slice(0, 5).forEach((z) => {
+    // keep the zones that are really on this chart (price in view, not closed through yet), THEN cap the
+    // count: capping first let far-away zones use up the slots and hid the ones next to the candles
+    const drawable = (set.zones || []).filter((z) => {
+      if (!inView(z.bottom, z.top)) return false;
+      const i0 = idxAt(z.start);
+      if (i0 === null) return false;
+      const up = z.dir === 'bull';
+      return !candles.slice(i0 + 1).some((c) => (up ? c.close < z.bottom : c.close > z.top));
+    });
+    drawable.slice(0, 8).forEach((z) => {
       if (!inView(z.bottom, z.top)) return;
       const i = idxAt(z.start);
       if (i === null) return;
@@ -871,8 +878,8 @@ function paintChart() {
       );
       if (Number.isFinite(newest)) shown = new Date(newest + 2 * 3600000);
     } else if (activeLive?.updatedAt) {
-      // hourly feed: update time + 2 hours
-      shown = new Date(activeLive.updatedAt.getTime() + 2 * 3600000);
+      // hourly feed: update time + 1 hour
+      shown = new Date(activeLive.updatedAt.getTime() + 3600000);
     }
 
     liveEl.textContent = shown
