@@ -684,7 +684,8 @@ function buildSmcOverlay({ set, candles, isH1, ageUnit, PAD, plotW, plotH, plotR
       const x0 = xl(i);
       const h = Math.max(yB - yT, 1.5);
       const tip = `${bull ? 'Bullish' : 'Bearish'} ${ZONE_NAME[z.kind] || z.kind} · ` +
-        `${fmt(z.bottom)} – ${fmt(z.top)} · touched ${z.touches}× · ${z.age}${unit} old`;
+        `${fmt(z.bottom)} – ${fmt(z.top)} · touched ${z.touches}× · ${z.age}${unit} old` +
+        (Number.isFinite(z.strength) ? ` · strength ${Math.round(z.strength * 100)}` : '');
      // after — label right-aligned inside the plot, just left of the gutter
           const labelY = h >= 12 ? yT + 10 : yT - 2;
           out.back +=
@@ -976,6 +977,22 @@ function paintChart() {
     setText('smc-note', tf === '15m' && !m.smc.m15
       ? '15m zones appear after the next model run'
       : parts.length ? parts.join(' · ') : 'Nothing to draw in view');
+  }
+
+  /* ----- The zone the entry sits on (always drawn, so the entry is visibly anchored to a zone) ----- */
+  const ez = t?.entryZone;
+  if (ez && ez.top >= lo && ez.bottom <= hi) {
+    const yT = y(Math.min(ez.top, hi));
+    const yB = y(Math.max(ez.bottom, lo));
+    const h = Math.max(yB - yT, 2);
+    const str = Number.isFinite(ez.strength) ? ` · strength ${Math.round(ez.strength * 100)}` : '';
+    const name = `${ez.dir === 'bull' ? 'Demand' : 'Supply'} ${ZONE_NAME[ez.kind] || ez.kind}`;
+    html +=
+      `<g><title>Entry zone · ${name} (${ez.timeframe}) · ${fmt(ez.bottom)} – ${fmt(ez.top)}${str}</title>` +
+      `<rect x="${PAD.left}" y="${yT}" width="${plotW}" height="${h}" fill="rgba(129,140,248,0.12)" ` +
+      `stroke="rgba(129,140,248,0.6)" stroke-width="1"/>` +
+      `<text x="${PAD.left + 6}" y="${h >= 12 ? yT + 10 : yT - 2}" font-size="9" font-family="${CHART_FONT}" ` +
+      `fill="rgba(165,172,255,0.95)">ENTRY ZONE · ${ZONE_LABEL[ez.kind] || ez.kind}${str}</text></g>`;
   }
 
   /* ----- Candles (now end before the right gutter) ----- */

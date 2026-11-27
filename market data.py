@@ -215,7 +215,8 @@ FEATURE_COLUMNS = (
      "d_pdh", "d_pdl", "in_daily_zone", "daily_zone_dist_atr",
      "d_sweep", "d_bos", "d_choch", "d_breaker", "d_ifvg",
      "dz_in", "dz_dist_atr", "dz_touches", "dz_age", "dz_width_atr", "dz_disp", "dz_n_near",
-     "dz_opp_dist_r", "dz_k_fvg", "dz_k_ob", "dz_k_ifvg", "dz_k_breaker", "dz_k_sweep"]
+     "dz_opp_dist_r", "dz_k_fvg", "dz_k_ob", "dz_k_ifvg", "dz_k_breaker", "dz_k_sweep",
+     "zone_str", "dz_str"]
 )
 COL = {c: i for i, c in enumerate(FEATURE_COLUMNS)}
 
@@ -230,7 +231,7 @@ M15_MIN_BARS      = 1500        # need at least this many 15m bars to attempt th
 M15_SWITCH_MARGIN = 0.03        # 15m pick must beat the H1 pick's EV by this (R) to be used live
 H1CTX_COLUMNS = ["h1_in_zone", "h1_zone_dist_atr", "h1_zone_n_near", "h1_zone_age", "h1_zone_width_atr",
                  "h1_k_fvg", "h1_k_ob", "h1_k_ifvg", "h1_k_breaker", "h1_k_sweep",
-                 "h1_trend_aligned", "h1_bos_aligned", "h1_opp_dist_r", "h1_atr_ratio"]
+                 "h1_trend_aligned", "h1_bos_aligned", "h1_opp_dist_r", "h1_atr_ratio", "h1_str"]
 M15_FEATURE_COLUMNS = FEATURE_COLUMNS + H1CTX_COLUMNS
 
 H1_CFG = {"tf": "H1", "unit": "H1 bars", "zone_max_age": ZONE_MAX_AGE, "swing_lb": SWING_LOOKBACK,
@@ -452,6 +453,189 @@ def _live_swings(P: dict, t: int, kind: str) -> list:
 # ============================================
 # DAILY CONTEXT
 # ============================================
+# ============================================
+# ZONE STRENGTH  (learned separately on the daily, 1-hour and 15-minute charts)
+# ============================================
+# For every zone (FVG / OB / IFVG / breaker / sweep) on a timeframe the model learns how likely it is to
+# HOLD when price first comes back to it: after the first return, does a limit order at the zone's edge,
+# with the stop just beyond the zone, reach 1.5R before the stop? The features are only what was known
+# when the zone appeared (type, size, displacement, trend / structure alignment, premium-discount,
+# momentum into it, session) plus, on the lower charts, the strength of the higher-timeframe zones it
+# overlaps (daily for 1H; daily and 1H for 15m). Strengths are out-of-fold (a zone is only ever scored by
+# a model trained on EARLIER data), so nothing here peeks at the future. Entries are then restricted to
+# the stronger zones and the trade model sees each zone's strength as a feature.
+ZS_KINDS = ["fvg", "ob", "ifvg", "breaker", "sweep"]
+ZS_PARAMS = {
+    "D":   {"name": "daily", "hold": 5,  "buf": 0.35,         "rr": 1.5, "a": 3, "w": 20, "maxage": DAILY_ZONE_MAX_AGE},
+    "H1":  {"name": "1-hour", "hold": 16, "buf": STOP_BUF_ATR, "rr": 1.5, "a": 3, "w": 48, "maxage": ZONE_MAX_AGE},
+    "M15": {"name": "15-minute", "hold": 32, "buf": 0.50,     "rr": 1.5, "a": 4, "w": 96, "maxage": 320},
+}
+ZS_MIN_EVENTS = 300          # labelled first-touch events needed to train
+ZS_FOLDS = 6                 # chronological blocks; block b is scored by a model trained on blocks < b
+ZS_MIN_AUC = 0.53            # below this the strength model is ignored (all zones neutral, no gating)
+ZS_GATE_Q = (0.50, 0.30, 0.0)   # entry zones must be in the top half / top 70% / any (relax levels 0 / 1 / 2)
+
+
+def _zs_zone_list(P: dict) -> list:
+    zl = [z for k in P["Z"] for z in P["Z"][k]]
+    zl.sort(key=lambda z: (z["known"], z["formation"]))
+    return zl
+
+
+def _zs_htf_table(Ph: dict):
+    zl = _zs_zone_list(Ph)
+    if not zl:
+        return None
+    return {"known": np.array([z["known"] for z in zl]),
+            "inv": np.array([np.inf if z["inv"] is None else z["inv"] for z in zl], dtype=float),
+            "top": np.array([z["top"] for z in zl]), "bot": np.array([z["bottom"] for z in zl]),
+            "bull": np.array([z["dir"] == "bull" for z in zl]),
+            "str": np.array([z.get("str", 0.5) for z in zl], dtype=float),
+            "maxage": ZS_PARAMS[Ph.get("zs_key", "H1")]["maxage"]}
+
+
+def _zs_features(P: dict, zl: list, prm: dict, htf: dict):
+    n = P["n"]
+    c, atr = P["c"], P["atr"]
+    kn = np.array([z["known"] for z in zl]); t = np.clip(kn, 0, n - 1)
+    top = np.array([z["top"] for z in zl]); bot = np.array([z["bottom"] for z in zl])
+    bull = np.array([z["dir"] == "bull" for z in zl]); sg = np.where(bull, 1.0, -1.0)
+    A = np.where(atr[t] > 0, atr[t], np.maximum(c[t] * 0.003, 1e-9))
+    mid = (top + bot) / 2
+    w = prm["w"]
+    rmin = pd.Series(P["l"]).rolling(w, min_periods=1).min().to_numpy()
+    rmax = pd.Series(P["h"]).rolling(w, min_periods=1).max().to_numpy()
+    rng = rmax[t] - rmin[t]
+    pos = np.where(rng > 0, np.clip((mid - rmin[t]) / np.where(rng > 0, rng, 1), 0, 1), 0.5)
+    hr = P["hour"][t].astype(float)
+    f = {}
+    for k in ZS_KINDS:
+        f["k_" + k] = np.array([z["kind"] == k for z in zl], dtype=float)
+    f["dir_bull"] = bull.astype(float)
+    f["width_atr"] = (top - bot) / A
+    f["disp"] = np.array([z.get("disp", 0.0) for z in zl], dtype=float)
+    f["lag"] = np.array([min(z["known"] - z["formation"], 50) for z in zl], dtype=float)
+    f["trend_al"] = sg * P["trend"][t]
+    f["bos_al"] = sg * P["bos_dir"][t]
+    f["since"] = np.minimum(P["since"][t], 100).astype(float)
+    f["range_pos"] = np.where(bull, pos, 1 - pos)               # 0 = favourable (discount for demand / premium for supply)
+    f["dist_atr"] = np.clip(sg * (c[t] - mid) / A, -10, 10)     # > 0: price is on the side it must come back from
+    f["mom_in"] = np.clip(-sg * (c[t] - c[np.maximum(t - prm["a"], 0)]) / A, -10, 10)
+    f["rng_atr"] = np.clip(rng / A, 0, 60)
+    f["atr_pct"] = A / c[t] * 100
+    f["hour_sin"] = np.sin(2 * np.pi * hr / 24); f["hour_cos"] = np.cos(2 * np.pi * hr / 24)
+    cols = list(f)
+    # higher-timeframe zones of the same direction that overlap this zone, and how strong they are
+    levels = []
+    if htf.get("d") is not None:
+        di = np.searchsorted(htf["d"]["P"]["date"], P["date"][t], side="left") - 1
+        levels.append(("d", htf["d"]["tab"], di))
+    if htf.get("h") is not None and "h1_map" in P:
+        levels.append(("h", htf["h"]["tab"], P["h1_map"][t]))
+    for tag, tab, idx in levels:
+        o_in = np.zeros(len(zl)); o_str = np.zeros(len(zl)); o_n = np.zeros(len(zl))
+        if tab is not None:
+            for i in range(len(zl)):
+                hi = int(idx[i])
+                if hi < 0:
+                    continue
+                a = np.searchsorted(tab["known"], hi - tab["maxage"], side="left")
+                b = np.searchsorted(tab["known"], hi, side="right")
+                if b <= a:
+                    continue
+                m = ((tab["inv"][a:b] > hi) & (tab["bull"][a:b] == bull[i])
+                     & (tab["bot"][a:b] <= top[i]) & (tab["top"][a:b] >= bot[i]))
+                if m.any():
+                    o_in[i] = 1.0; o_n[i] = min(int(m.sum()), 5); o_str[i] = float(tab["str"][a:b][m].max())
+        f[tag + "_in"], f[tag + "_str"], f[tag + "_n"] = o_in, o_str, o_n
+    cols = list(f)
+    return np.column_stack([f[k] for k in cols]).astype(float), cols
+
+
+def _zs_labels(P: dict, zl: list, prm: dict):
+    """Outcome of the FIRST return to each zone. y: 1 = reached rr*risk before the stop, 0 = stopped
+    (or no reaction in `hold` bars), nan = not returned yet / not resolved. jt = bar of that return."""
+    n = P["n"]; hi, lo, atr = P["h"], P["l"], P["atr"]
+    y = np.full(len(zl), np.nan); jt = np.full(len(zl), np.inf)
+    hold, buf, rr, maxage = prm["hold"], prm["buf"], prm["rr"], prm["maxage"]
+    for i, z in enumerate(zl):
+        k = z["known"]
+        e = min(n - 1, k + maxage, z["inv"] if z["inv"] is not None else n - 1)
+        if e <= k:
+            continue
+        bull = z["dir"] == "bull"
+        seg = (lo[k + 1:e + 1] <= z["top"]) if bull else (hi[k + 1:e + 1] >= z["bottom"])
+        if not seg.any():
+            continue
+        j = k + 1 + int(seg.argmax())
+        if j + hold >= n:
+            continue
+        a = float(atr[k]) if atr[k] > 0 else (z["top"] - z["bottom"]) + 1e-9
+        E = z["top"] if bull else z["bottom"]
+        S = z["bottom"] - buf * a if bull else z["top"] + buf * a
+        risk = abs(E - S); T = E + rr * risk if bull else E - rr * risk
+        w_lo, w_hi = lo[j:j + hold + 1], hi[j:j + hold + 1]
+        stop = (w_lo <= S) if bull else (w_hi >= S)
+        tgt = (w_hi >= T) if bull else (w_lo <= T)
+        tgt[0] = False
+        fs = int(stop.argmax()) if stop.any() else 10 ** 9
+        ft = int(tgt.argmax()) if tgt.any() else 10 ** 9
+        y[i] = 1.0 if ft < fs else 0.0
+        jt[i] = j
+    return y, jt
+
+
+def train_zone_strength(P: dict, key: str, index_name: str, htf: dict = None) -> dict:
+    """Scores every zone of P (z['str'] in 0..1) and sets P['str_gate'] (entry thresholds per relax level)."""
+    prm = ZS_PARAMS[key]; tf = prm["name"]
+    P["zs_key"] = key
+    P["str_gate"] = (0.0, 0.0, 0.0)
+    zl = _zs_zone_list(P)
+    for z in zl:
+        z["str"] = 0.5
+    if len(zl) < ZS_MIN_EVENTS:
+        print(f"   ⚠️  {tf} zone strength skipped — only {len(zl)} zones")
+        return {"ok": False}
+    t0 = time.time()
+    X, cols = _zs_features(P, zl, prm, htf or {})
+    y, jt = _zs_labels(P, zl, prm)
+    kn = np.array([z["known"] for z in zl])
+    n = P["n"]
+    edges = np.linspace(50, n, ZS_FOLDS + 1)
+    fold = np.clip(np.searchsorted(edges, kn, side="right") - 1, 0, ZS_FOLDS - 1)
+    lab = ~np.isnan(y)
+    pred = np.full(len(zl), np.nan)
+    for b in range(1, ZS_FOLDS):
+        trm = lab & (fold < b) & (jt < edges[b])           # only returns that finished before block b starts
+        if trm.sum() < ZS_MIN_EVENTS or len(np.unique(y[trm])) < 2:
+            continue
+        clf = RandomForestClassifier(n_estimators=150, max_depth=8, min_samples_leaf=20, max_features=0.6,
+                                     class_weight="balanced_subsample", random_state=42, n_jobs=-1
+                                     ).fit(X[trm], y[trm].astype(int))
+        sel = fold == b
+        pred[sel] = clf.predict_proba(X[sel])[:, list(clf.classes_).index(1)]
+    ev = lab & ~np.isnan(pred)
+    if ev.sum() < 150 or len(np.unique(y[ev])) < 2:
+        print(f"   ⚠️  {tf} zone strength skipped — only {int(ev.sum())} scored first-returns")
+        return {"ok": False}
+    auc = float(roc_auc_score(y[ev], pred[ev]))
+    base = float(y[ev].mean())
+    hi_m = ev & (pred >= np.nanquantile(pred[ev], 0.70))
+    print(f"   🧱 {tf} zone strength [{index_name}]: {int(lab.sum())} first-returns | out-of-fold AUC {auc:.3f} "
+          f"| hold rate {base:.1%} overall -> {y[hi_m].mean():.1%} for the strongest 30% ({time.time() - t0:.1f}s)")
+    if not auc >= ZS_MIN_AUC:
+        print(f"      AUC below {ZS_MIN_AUC} — {tf} zone strength ignored (all zones treated as equal)")
+        return {"ok": False, "auc": auc}
+    sc = ~np.isnan(pred)
+    for i, z in enumerate(zl):
+        if sc[i]:
+            z["str"] = float(pred[i])
+    P["str_gate"] = tuple(float(np.quantile(pred[sc], q)) if q > 0 else 0.0 for q in ZS_GATE_Q)
+    kinds = pd.Series(y[ev], index=[zl[i]["kind"] for i in np.where(ev)[0]]).groupby(level=0).agg(["mean", "size"])
+    print("      hold rate by zone type: " + " | ".join(f"{k} {r['mean']:.0%} (n={int(r['size'])})" for k, r in kinds.iterrows()))
+    return {"ok": True, "auc": auc}
+
+
 def daily_base_ctx(frame: pd.DataFrame) -> dict:
     def col(name, default=np.nan):
         return frame[name].to_numpy(float) if name in frame.columns else np.full(len(frame), default)
@@ -490,7 +674,7 @@ def _daily_zone_lists(dP: dict, di: int, side: str):
             sh_, sl_ = hh[z["known"] + 1:di + 1], ll[z["known"] + 1:di + 1]
             touches = int(((sl_ <= z["top"]) & (sh_ >= z["bottom"])).sum()) if len(sh_) else 0
             info = {"kind": z["kind"], "top": z["top"], "bottom": z["bottom"], "touches": min(touches, 10),
-                    "age": di - z["known"], "disp": z.get("disp", 0.0)}
+                    "age": di - z["known"], "disp": z.get("disp", 0.0), "str": z.get("str", 0.5)}
             (al if (z["dir"] == "bull") == long else op).append(info)
     memo[key] = (al, op)
     return al, op
@@ -543,7 +727,8 @@ def smc_export(P: dict, t: int, times, fmt, close: float, max_age: int, n_zones:
         sh_, sl_ = hh[z["known"] + 1:t + 1], ll[z["known"] + 1:t + 1]
         touches = int(((sl_ <= z["top"]) & (sh_ >= z["bottom"])).sum()) if len(sh_) else 0
         zones.append({"kind": z["kind"], "dir": z["dir"], "top": r2(z["top"]), "bottom": r2(z["bottom"]),
-                      "start": fmt(times[si]), "touches": min(touches, 10), "age": int(t - z["known"])})
+                      "start": fmt(times[si]), "touches": min(touches, 10), "age": int(t - z["known"]),
+                      "strength": round(float(z.get("str", 0.5)), 2)})
     highs = sorted([(px, i) for i, px in _live_swings(P, t, "sh") if px > close])[:2]
     lows = sorted([(px, i) for i, px in _live_swings(P, t, "sl") if px < close], reverse=True)[:2]
     levels = ([{"type": "bsl", "price": r2(px), "start": fmt(times[i])} for px, i in highs] +
@@ -635,7 +820,8 @@ def _h1_zone_ctx(P: dict, t: int, side: str):
             for z in hP["Z"].get(k, ()):
                 if z["inv"] is not None and z["inv"] <= j:
                     continue
-                info = {"kind": z["kind"], "top": z["top"], "bottom": z["bottom"], "age": j - z["known"]}
+                info = {"kind": z["kind"], "top": z["top"], "bottom": z["bottom"], "age": j - z["known"],
+                        "str": z.get("str", 0.5)}
                 (al if (z["dir"] == "bull") == long else op).append(info)
         sg = 1.0 if long else -1.0
         out = {"al": al, "op": op, "atr": float(hP["atr"][j]),
@@ -663,6 +849,7 @@ def _h1_feats(P, t, side, E, S, ctx) -> dict:
         f["h1_zone_dist_atr"] = min(d, 5.0); f["h1_in_zone"] = float(d <= 0.02)
         f["h1_zone_n_near"] = float(n_near); f["h1_zone_age"] = float(min(z["age"], ZONE_MAX_AGE))
         f["h1_zone_width_atr"] = (z["top"] - z["bottom"]) / a
+        f["h1_str"] = float(z.get("str", 0.5))
         if "h1_k_" + z["kind"] in f:
             f["h1_k_" + z["kind"]] = 1.0
     risk = abs(E - S)
@@ -733,6 +920,7 @@ def _features(P, t, side, z, E, S, T, rr, e_frac, s_style, rank, is_eq, ctx, con
               "dz_k_fvg", "dz_k_ob", "dz_k_ifvg", "dz_k_breaker", "dz_k_sweep"):
         f[k] = 0.0
     f["dz_dist_atr"] = 5.0; f["dz_opp_dist_r"] = 10.0
+    f["zone_str"] = float(z.get("str", 0.5)); f["dz_str"] = 0.0
     if d_atr and not np.isnan(d_atr) and d_atr > 0:
         near = None
         for dz in ctx.get("dz_al", ()):
@@ -747,6 +935,7 @@ def _features(P, t, side, z, E, S, T, rr, e_frac, s_style, rank, is_eq, ctx, con
             f["dz_touches"] = float(dz["touches"]); f["dz_age"] = float(min(dz["age"], DAILY_ZONE_MAX_AGE))
             f["dz_width_atr"] = (dz["top"] - dz["bottom"]) / d_atr; f["dz_disp"] = float(dz["disp"])
             f["dz_k_" + dz["kind"]] = 1.0
+            f["dz_str"] = float(dz.get("str", 0.5))
         risk = abs(E - S)
         gaps = [(oz["bottom"] - E) if side == "LONG" else (E - oz["top"]) for oz in ctx.get("dz_op", ())]
         gaps = [g for g in gaps if g > 0]
@@ -759,7 +948,7 @@ def _features(P, t, side, z, E, S, T, rr, e_frac, s_style, rank, is_eq, ctx, con
 
 # --- Stops and targets stay out of the middle of zones ---------------------------------------------
 # A stop inside an FVG / OB / IFVG / breaker is just a place price likes to trade through, so it is
-# moved to just BEYOND the zone (above it for a short, below it for a long). A take-profit inside a
+# moved to just BEYOND that one zone (above it for a short, below it for a long). A take-profit inside a
 # zone on its way is pulled back to just BEFORE the zone's near edge (price often stalls there and
 # never reaches a target in the middle of it).
 ZONE_TARGET_BUF_ATR = 0.05
@@ -778,41 +967,24 @@ def _active_zone_bounds(P: dict, t: int) -> list:
 
 
 def _clear_stop(S: float, long: bool, bounds: list, buf: float) -> float:
-    """Move a stop that sits inside a zone (or within `buf` of its outer edge) to just beyond that zone."""
-    for _ in range(len(bounds) + 1):
-        moved = False
-        for b, tp in bounds:
-            if long and b - buf < S < tp:
-                S, moved = b - buf, True
-            elif (not long) and b < S < tp + buf:
-                S, moved = tp + buf, True
-        if not moved:
-            break
-    return S
+    """If a stop sits inside a zone (or within `buf` of its outer edge) it moves to just beyond THAT zone,
+    once: it does not hop on over further zones, which would widen the stop a lot."""
+    hit = [(b, tp) for b, tp in bounds if (long and b - buf < S < tp) or ((not long) and b < S < tp + buf)]
+    if not hit:
+        return S
+    return min(b for b, _ in hit) - buf if long else max(tp for _, tp in hit) + buf
 
 
 def _clear_target(T: float, E: float, long: bool, bounds: list, buf: float):
-    """Pull a target that sits inside an opposing zone back to just before the zone. Only zones that
-    start beyond the entry count. Returns None if nothing sensible is left between entry and zone."""
-    for _ in range(len(bounds) + 1):
-        moved = False
-        for b, tp in bounds:
-            if long and b > E and b - buf < T <= tp:
-                T, moved = b - buf, True
-            elif (not long) and tp < E and b <= T < tp + buf:
-                T, moved = tp + buf, True
-        if not moved:
-            break
+    """A target inside an opposing zone ahead of the entry is pulled back to just before that zone (the
+    first one in the way, once). None if nothing sensible is left between entry and zone."""
+    hit = [(b, tp) for b, tp in bounds
+           if (long and b > E and b - buf < T <= tp) or ((not long) and tp < E and b <= T < tp + buf)]
+    if hit:
+        T = min(b for b, _ in hit) - buf if long else max(tp for _, tp in hit) + buf
     if (long and T <= E) or ((not long) and T >= E):
         return None
     return T
-
-
-RELAX = [   # (max_entry_dist, min_risk, max_risk, min_rr, max_rr) -- tried in order until a candidate exists
-    (MAX_ENTRY_DIST_ATR, MIN_RISK_ATR, MAX_RISK_ATR, MIN_RR, MAX_RR),
-    (3.0, 0.35, 3.5, 0.8, 6.0),
-    (6.0, 0.30, 4.5, 0.5, 10.0),
-]
 
 
 def _candidates(P: dict, t: int, side: str, ctx: dict, level: int = 0) -> list:
@@ -822,6 +994,7 @@ def _candidates(P: dict, t: int, side: str, ctx: dict, level: int = 0) -> list:
     c_t, atr = P["c"][t], P["atr"][t]
     if not (atr > 0 and c_t > 0):
         return []
+    gate = P.get("str_gate", (0.0, 0.0, 0.0))[min(level, 2)]
     if "h1P" in P:                                          # 15m model: add the H1 view of the chart
         ctx = {**ctx, "h1": _h1_zone_ctx(P, t, side)}
     pool = []
@@ -834,6 +1007,8 @@ def _candidates(P: dict, t: int, side: str, ctx: dict, level: int = 0) -> list:
             if long and z["bottom"] >= c_t:
                 continue
             if (not long) and z["top"] <= c_t:
+                continue
+            if z.get("str", 1.0) < gate:                 # entries only on zones the model rates strong enough
                 continue
             prox = (c_t - z["top"]) if long else (z["bottom"] - c_t)
             dist = max(prox, 0.0) / atr
@@ -1052,8 +1227,9 @@ def _fallback_candidate(P: dict, t: int, side: str):
             if (long and ref > c_t) or ((not long) and ref < c_t):
                 continue                                   # zone edge must be on the entry side of price
             d = abs(c_t - ref)
-            if best is None or d < best[0]:
-                best = (d, z)
+            weak = z.get("str", 1.0) < P.get("str_gate", (0, 0, 0))[1]
+            if best is None or (weak, d) < (best[2], best[0]):
+                best = (d, z, weak)
     z = best[1] if best else None
     if z is not None:
         E = z["top"] if long else z["bottom"]
@@ -1113,7 +1289,8 @@ def pick_live_trade(P: dict, t: int, side: str, ctx: dict, model: dict):
         else:
             h = (-X[:, COL["entry_dist_atr"]] + 0.5 * X[:, COL["confluence_n"]]
                  + 0.5 * X[:, COL["in_daily_zone"]] + 0.3 * X[:, COL["trend_aligned"]]
-                 + 0.2 * X[:, COL["bos_aligned"]] - 0.3 * np.abs(X[:, COL["rr"]] - 1.5))
+                 + 0.2 * X[:, COL["bos_aligned"]] - 0.3 * np.abs(X[:, COL["rr"]] - 1.5)
+                 + 1.5 * X[:, COL["zone_str"]] + 0.5 * X[:, COL["dz_str"]])
             k = int(np.argmax(h))
             score, tag = float(h[k]), "heuristic"
         cd = cands[k]; z = cd["zone"]
@@ -1121,6 +1298,7 @@ def pick_live_trade(P: dict, t: int, side: str, ctx: dict, model: dict):
         relax_txt = "" if level == 0 else f"; relaxed filters L{level}"
         etype = (f"{tf} {z['kind'].upper()} {style} limit ("
                  + (f"model; P(fill)={pf:.2f}, EV={evk:+.2f}R" if tag == "model" else "heuristic")
+                 + f"; zone strength {z.get('str', 0.5):.2f}"
                  + f"{relax_txt}; valid {cfg['valid']} {cfg['unit']})")
         ssrc = ("beyond zone" if cd["s_style"] == "zone"
                 else f"beyond recent {tf} swing {'low' if long else 'high'}") + " (clear of other zones)"
@@ -1140,6 +1318,7 @@ def pick_live_trade(P: dict, t: int, side: str, ctx: dict, model: dict):
             "kind": z["kind"], "hour_utc": hr, "session": _sess(hr).title(),
             "zone_top": z["top"], "zone_bottom": z["bottom"], "entry_price": cd["entry"],
             "model_prob": pf, "expected_r": evk, "h1_trend": int(P["trend"][t]),
+            "zone_strength": float(z.get("str", 0.5)),
             "bars_since_zone": int(t - z["known"]),
             "distance_pct": abs(c_t - cd["entry"]) / c_t * 100,
             "stop_reference": cd["stop"], "applied": True, "ote_aligned": False,
@@ -3091,6 +3270,18 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
         'Feature': feature_columns, 'Importance': model1.feature_importances_
     }).sort_values('Importance', ascending=False)
 
+    # ---------------- ZONE STRENGTH (daily -> 1H -> 15m) ----------------
+    print("\n🧱 Learning zone strength (daily, 1-hour, 15-minute)...")
+    train_zone_strength(d_P, "D", index_name)
+    _htf = {"d": {"P": d_P, "tab": _zs_htf_table(d_P)}}
+    if HAS_HOURLY:
+        train_zone_strength(h1_P, "H1", index_name, _htf)
+    if HAS_M15:
+        _htf15 = dict(_htf)
+        if HAS_HOURLY:
+            _htf15["h"] = {"P": h1_P, "tab": _zs_htf_table(h1_P)}
+        train_zone_strength(m15_P, "M15", index_name, _htf15)
+
     # ---------------- H1 LEARNED MODEL ----------------
     h1_model = {"accepted": False, "n": 0, "reason": "H1 not attempted"}
     m15_model = {"accepted": False, "n": 0, "reason": "M15 not attempted"}
@@ -3547,6 +3738,17 @@ def _json_num(v):
     return None if np.isnan(v) else v
 
 
+def _entry_zone_json(trade: dict):
+    """The zone the entry sits on (so the page can draw it), with its learned strength."""
+    hm = (trade or {}).get('hourly_meta') or {}
+    top, bot = _json_num(hm.get('zone_top')), _json_num(hm.get('zone_bottom'))
+    if top is None or bot is None or not top > bot:
+        return None
+    return {"top": price_round(top), "bottom": price_round(bot), "kind": hm.get('kind'),
+            "dir": "bull" if trade.get('action') == 'LONG' else "bear",
+            "timeframe": hm.get('timeframe', 'H1'), "strength": _json_num(hm.get('zone_strength'))}
+
+
 def _trade_for_json(trade: dict) -> dict:
     """Entry-position data for predictions.json."""
     if trade is None or trade.get('action') not in ('LONG', 'SHORT'):
@@ -3566,6 +3768,7 @@ def _trade_for_json(trade: dict) -> dict:
         "entry_type":   trade.get('entry_type'),
         "stop_source":  trade.get('stop_source'),
         "target_source": trade.get('target_source'),
+        "entry_zone":   _entry_zone_json(trade),
     }
 
 

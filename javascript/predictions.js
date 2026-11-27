@@ -99,6 +99,16 @@ function previousClose(olderPredictions, symbol, closeDate) {
   return null;
 }
 
+// The zone the model's entry sits on (drawn on every chart so the entry is never "floating")
+function normaliseEntryZone(z) {
+  const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+  if (!z || typeof z !== 'object' || !isNum(z.top) || !isNum(z.bottom) || !(z.top > z.bottom)) return null;
+  return {
+    top: z.top, bottom: z.bottom, kind: String(z.kind || ''), dir: z.dir === 'bear' ? 'bear' : 'bull',
+    timeframe: z.timeframe || 'H1', strength: isNum(z.strength) ? z.strength : null,
+  };
+}
+
 // The "trade" map the pipeline stores next to each prediction (entry, stop, target, risk/reward)
 function normaliseTrade(t) {
   if (!t || typeof t !== 'object') return null;
@@ -115,6 +125,7 @@ function normaliseTrade(t) {
     entryType: t.entry_type ?? null,
     stopSource: t.stop_source ?? null,
     targetSource: t.target_source ?? null,
+    entryZone: normaliseEntryZone(t.entry_zone),
   };
 }
 
@@ -137,6 +148,7 @@ function normaliseSmcSet(s) {
       start: z.start,
       touches: isNum(z.touches) ? z.touches : 0,
       age: isNum(z.age) ? z.age : 0,
+      strength: isNum(z.strength) ? z.strength : null,
     })),
     levels: list(s.levels, (l) => isNum(l.price) && typeof l.start === 'string' && (l.type === 'bsl' || l.type === 'ssl')),
     structure: list(s.structure, (b) =>
