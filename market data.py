@@ -987,6 +987,31 @@ def _clear_target(T: float, E: float, long: bool, bounds: list, buf: float):
     return T
 
 
+def _all_tf_bounds(Ps) -> list:
+    """Zone bounds from every timeframe (daily / H1 / M15) still valid at its latest bar, so a stop is
+    kept clear of a zone even when it was detected on a different timeframe than the one that made the pick."""
+    out = []
+    for P, t, age in Ps:
+        if P is None:
+            continue
+        for k in range(max(0, t - age), t + 1):
+            for z in P["Z"].get(k, ()):
+                if z["kind"] == "sweep" or (z["inv"] is not None and z["inv"] <= t):
+                    continue
+                if z["top"] > z["bottom"]:
+                    out.append((float(z["bottom"]), float(z["top"])))
+    return out
+
+
+def _final_clear(entry, stop, target, long, bounds, atr, sbuf):
+    """Last pass over a finished pick: stop beyond any zone it sits in (once), target before any zone in the way."""
+    S = _clear_stop(stop, long, bounds, sbuf * atr)
+    T = _clear_target(target, entry, long, bounds, ZONE_TARGET_BUF_ATR * atr)
+    if T is None:
+        T = target
+    return S, T
+
+
 def _candidates(P: dict, t: int, side: str, ctx: dict, level: int = 0) -> list:
     cfg = _cfg(P)
     max_dist, min_risk, max_risk, min_rr, max_rr = cfg["relax"][level]
@@ -3387,6 +3412,18 @@ def run_single_index(csv_path: str, index_name: str, dxy_df=None):
                       f"→ using {chosen['hourly_meta']['timeframe']}")
                 pick = chosen
             entry, stop_loss, take_profit = pick['entry'], pick['stop'], pick['target']
+            _pP = m15_P if (HAS_M15 and pick['hourly_meta'].get('timeframe') == 'M15') else h1_P
+            _bnd = _all_tf_bounds([(h1_P, len(hourly_df) - 1, _cfg(h1_P)["zone_max_age"]),
+                                   (m15_P if HAS_M15 else None, (len(m15_df) - 1) if HAS_M15 else 0,
+                                    _cfg(m15_P)["zone_max_age"] if HAS_M15 else 0),
+                                   (d_P, d_i, 60)])
+            _atr_p = float(_pP["atr"][len(_pP["c"]) - 1])
+            if _atr_p > 0:
+                _s2, _t2 = _final_clear(entry, stop_loss, take_profit, side == 'LONG', _bnd, _atr_p,
+                                        _cfg(_pP)["stop_buf"])
+                if abs(_s2 - stop_loss) > 1e-12 or abs(_t2 - take_profit) > 1e-12:
+                    stop_loss, take_profit = _s2, _t2
+                    stop_src = stop_src + ' (cleared past zone)'
             entry_type, stop_src, target_src = pick['entry_type'], pick['stop_source'], pick['target_source']
             zone_strength = pick['score']
             hourly_meta = pick['hourly_meta']
