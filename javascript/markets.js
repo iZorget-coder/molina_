@@ -383,6 +383,48 @@ function mergeLive(raw, live) {
   return [...byMs.values()];
 }
 
+/**
+ * Hourly candles rebuilt from 15-minute candles (open of the first, highest high, lowest low, close of
+ * the last). The 15-minute feed refreshes every 15 minutes, the hourly feed only once an hour, so this is
+ * what keeps the 1H and 1D candles on the same prices as the 15m chart. An hour is only rebuilt when its
+ * first 15-minute bar is present (otherwise the open would be wrong); the hour still forming is flagged partial.
+ */
+export function hourlyFromFifteen(feed) {
+  const HOUR = 3600000;
+  const buckets = new Map();
+  [...(feed?.candles ?? [])]
+    .map((c) => ({ ...c, ms: toMs(c.time) }))
+    .filter((c) => Number.isFinite(c.ms))
+    .sort((a, b) => a.ms - b.ms)
+    .forEach((c) => {
+      const h = Math.floor(c.ms / HOUR) * HOUR;
+      const b = buckets.get(h);
+      if (!b) buckets.set(h, { first: c.ms, n: 1, time: new Date(h).toISOString(), open: c.open, high: c.high, low: c.low, close: c.close, partial: Boolean(c.partial) });
+      else {
+        b.n += 1;
+        b.high = Math.max(b.high, c.high);
+        b.low = Math.min(b.low, c.low);
+        b.close = c.close;
+        b.partial = Boolean(c.partial);
+      }
+    });
+  return [...buckets.entries()]
+    .filter(([h, b]) => b.first === h)                       // starts on the hour
+    .map(([, b]) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, partial: b.partial || b.n < 4 }));
+}
+
+/** Hourly feed with the hours the 15-minute feed covers replaced by the 15-minute-built candles. */
+export function combineHourly(hourly, fifteen) {
+  const derived = hourlyFromFifteen(fifteen);
+  if (!derived.length) return hourly;
+  const byMs = new Map();
+  (hourly?.candles ?? []).forEach((c) => byMs.set(toMs(c.time), c));
+  derived.forEach((c) => byMs.set(toMs(c.time), c));
+  return { ...(hourly ?? { source: 'tv-15m', updatedAt: fifteen?.updatedAt ?? null }), candles: [...byMs.values()] };
+}
+
+const liveHourly = () => combineHourly(liveData, liveFifteen);
+
 /** The live feed whose newest candle is the most recent (15-minute normally beats hourly). */
 function freshestLive() {
   const newest = (f) => (f?.candles?.length ? Math.max(...f.candles.map((c) => toMs(c.time)).filter(Number.isFinite)) : -Infinity);
@@ -470,14 +512,16 @@ export const dropWeekendDays = (arr, keepWeekends = false) =>
 function chartRows(m, tf) {
   if (tf === '1D') {
     const wk = Boolean(m?.weekends);
-    const daily = liveData ? mergeDaily(m?.candles, liveData, wk) : m?.candles;
+    const lh = liveHourly();
+    const daily = lh ? mergeDaily(m?.candles, lh, wk) : m?.candles;
     return cleanCandles(dropWeekendDays(daily, wk), '1D');
   }
   if (tf === '15m') {
     // there are no stored 15-minute candles: the chart is the live_fifteen feed
     return cleanCandles(mergeLive([], liveFifteen), '15m');
   }
-  return cleanCandles(liveData ? mergeLive(m?.candlesH1, liveData) : m?.candlesH1, '1H');
+  const lh = liveHourly();
+  return cleanCandles(lh ? mergeLive(m?.candlesH1, lh) : m?.candlesH1, '1H');
 }
 
 /**
@@ -764,7 +808,7 @@ function paintChart() {
   const tf = currentTimeframe;
   const isH1 = tf !== '1D';                     // intraday (1H or 15m): candles are keyed by time
   const tfName = tf === '15m' ? '15-minute' : tf === '1H' ? 'hourly' : 'daily';
-  const activeLive = tf === '15m' ? liveFifteen : tf === '1H' ? liveData : null;
+  const activeLive = tf === '15m' ? liveFifteen : tf === '1H' ? (liveData ?? liveFifteen) : null;
 
   const { rows, dropped } = chartRows(m, tf);
 
