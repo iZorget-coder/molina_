@@ -859,20 +859,19 @@ function paintChart() {
   }
 
   // live feed time: own element in the SMC row (the header line is hidden on some phones)
- 
   const liveEl = $('live-note');
   if (liveEl) {
     liveEl.hidden = !(isH1 && activeLive);
 
     let shown = null;
     if (tf === '15m') {
-      // newest 15-minute candle in the feed shown one hour later (SAST)
+      // newest 15-minute candle in the feed (21:15 in the feed) shown as 23:15 UTC
       const newest = Math.max(
         ...(activeLive?.candles ?? []).map((c) => toMs(c.time)).filter(Number.isFinite)
       );
-      if (Number.isFinite(newest)) shown = new Date(newest + 3 * 3600000);
+      if (Number.isFinite(newest)) shown = new Date(newest + 2 * 3600000);
     } else if (activeLive?.updatedAt) {
-      // hourly feed: update time + 2 hours (SAST)
+      // hourly feed: update time + 2 hours
       shown = new Date(activeLive.updatedAt.getTime() + 2 * 3600000);
     }
 
