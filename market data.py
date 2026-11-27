@@ -1003,12 +1003,23 @@ def _all_tf_bounds(Ps) -> list:
     return out
 
 
-def _final_clear(entry, stop, target, long, bounds, atr, sbuf):
-    """Last pass over a finished pick: stop beyond any zone it sits in (once), target before any zone in the way."""
-    S = _clear_stop(stop, long, bounds, sbuf * atr)
-    T = _clear_target(target, entry, long, bounds, ZONE_TARGET_BUF_ATR * atr)
-    if T is None:
-        T = target
+def _final_clear(entry, stop, target, long, bounds, atr, sbuf, max_risk_atr=3.0, min_rr=1.0, max_zone_atr=1.5):
+    """Last pass over a finished pick, with guards so it can never wreck the risk/reward:
+    - only SMALL zones (<= max_zone_atr ATR tall) are cleared: a big zone cannot be 'engulfed' by a stop;
+    - the stop moves past one zone only if the risk stays <= max_risk_atr ATR and R:R stays >= min_rr;
+    - the target is pulled back before a zone only if at least min_rr x risk (and 0.5 ATR) of reward is left;
+    otherwise the original level is kept."""
+    small = [(b, tp) for b, tp in bounds if (tp - b) <= max_zone_atr * atr]
+    S, T = stop, target
+    S1 = _clear_stop(S, long, small, sbuf * atr)
+    if S1 != S:
+        risk1 = abs(entry - S1)
+        if risk1 <= max_risk_atr * atr and abs(T - entry) / risk1 >= min_rr:
+            S = S1
+    risk = abs(entry - S)
+    T1 = _clear_target(T, entry, long, small, ZONE_TARGET_BUF_ATR * atr)
+    if T1 is not None and T1 != T and abs(T1 - entry) >= max(0.5 * atr, min_rr * risk):
+        T = T1
     return S, T
 
 
@@ -1274,7 +1285,9 @@ def _fallback_candidate(P: dict, t: int, side: str):
     elif risk > 2.0 * atr:
         S = E - 2.0 * atr if long else E + 2.0 * atr
     bounds = _active_zone_bounds(P, t)
-    S = _clear_stop(S, long, bounds, cfg["stop_buf"] * atr)     # never inside a zone (may exceed the 2 ATR clamp)
+    S1 = _clear_stop(S, long, bounds, cfg["stop_buf"] * atr)    # never inside a zone ...
+    if abs(E - S1) <= 2.5 * atr:                                 # ... unless that would blow the risk up
+        S = S1
     risk = abs(E - S)
     tgt_sw = _live_swings(P, t, "sh" if long else "sl")
     tl = sorted([p for _, p in tgt_sw if (p > E + 0.3 * atr if long else p < E - 0.3 * atr)],
