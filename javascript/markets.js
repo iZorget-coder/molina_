@@ -543,13 +543,14 @@ export function evaluateTrade(t, rows, fromMs) {
   const rOf = (p) => (long ? p - t.entry : t.entry - p) / risk;
 
   let fill = null;
+  let missed = null;      // the target traded before the entry did; the order stays live, so a later return to the entry still fills it
   for (const c of bars) {
     if (!fill) {
       if (long ? c.low <= t.entry : c.high >= t.entry) {
         fill = { time: c.time };
         if (hitStop(c)) return { state: 'stopped', fill, exit: { time: c.time, price: t.stopLoss }, r: -1 };
-      } else if (hitTarget(c)) {
-        return { state: 'missed', exit: { time: c.time, price: t.takeProfit } };
+      } else if (!missed && hitTarget(c)) {
+        missed = { time: c.time, price: t.takeProfit };
       }
       continue;
     }
@@ -557,9 +558,9 @@ export function evaluateTrade(t, rows, fromMs) {
     if (hitTarget(c)) return { state: 'target', fill, exit: { time: c.time, price: t.takeProfit }, r: rOf(t.takeProfit) };
   }
   const last = bars[bars.length - 1];
-  return fill
-    ? { state: 'open', fill, r: rOf(last.close), price: last.close }
-    : { state: 'waiting', price: last.close, away: Math.abs(last.close - t.entry) };
+  if (fill) return { state: 'open', fill, r: rOf(last.close), price: last.close };
+  if (missed) return { state: 'missed', exit: missed };
+  return { state: 'waiting', price: last.close, away: Math.abs(last.close - t.entry) };
 }
 
 function tradeStatus() {
@@ -584,7 +585,7 @@ function paintTradeStatus() {
     open: () => `Filled · open ${signedR(st.r)} · price ${fmt(st.price)}`,
     target: () => `Target reached · ${signedR(st.r)}`,
     stopped: () => 'Stopped out · -1.0R',
-    missed: () => 'Missed · target traded before the entry filled',
+    missed: () => 'Missed so far · target traded before the entry filled (order still live)',
   }[st.state]();
   const tone = { target: 'up', stopped: 'down', open: st.r >= 0 ? 'up' : 'down' }[st.state] || 'flat';
   el.dataset.tone = tone;
